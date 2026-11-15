@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#1b1f3b">
+<title>Thai Word Drop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai+Looped:wght@500;700&family=Baloo+2:wght@600;800&display=swap" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Crect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%235a45c9%22/%3E%3Ctext x=%2250%22 y=%2272%22 font-size=%2260%22 text-anchor=%22middle%22 fill=%22%23ffcc33%22%3E%E0%B8%81%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- HOME -->
+<section id="home" class="screen active">
+  <header class="brand">
+    <h1>Thai Word Drop <span class="th">อ่านให้ทัน!</span></h1>
+    <p class="sub">Read each Thai word out loud before it lands on the stack.</p>
+  </header>
+
+  <div class="levels">
+    <button class="level-card" data-level="1" id="level1Card">
+      <span class="lv">Level 1</span>
+      <span class="lv-name">Word Drop</span>
+      <span class="lv-desc">Words fall. Read them before they land.</span>
+    </button>
+    <div class="level-card locked"><span class="lv">Level 2</span><span class="lv-name">Coming soon</span></div>
+    <div class="level-card locked"><span class="lv">Level 3</span><span class="lv-name">Coming soon</span></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <h2>Word lists</h2>
+      <button id="newListBtn" class="btn primary">+ New list from photo or text</button>
+    </div>
+    <ul id="listList" class="list-list"></ul>
+  </div>
+
+  <div class="panel settings">
+    <h2>Game settings</h2>
+    <label>Speed
+      <select id="setSpeed">
+        <option value="14">Very slow</option>
+        <option value="10" selected>Slow</option>
+        <option value="7">Normal</option>
+        <option value="5">Fast</option>
+      </select>
+    </label>
+    <label>Word order
+      <select id="setOrder">
+        <option value="shuffle" selected>Shuffle</option>
+        <option value="inorder">In order</option>
+      </select>
+    </label>
+    <label>Check reading with
+      <select id="setMic">
+        <option value="mic" selected>Microphone + parent button</option>
+        <option value="parent">Parent button only</option>
+      </select>
+    </label>
+    <p id="micSupport" class="hint"></p>
+  </div>
+</section>
+
+<!-- EDITOR -->
+<section id="editor" class="screen">
+  <header class="bar">
+    <button class="btn ghost" data-go="home">← Back</button>
+    <h2 id="editorTitle">New word list</h2>
+  </header>
+  <div class="panel">
+    <label class="full">List name
+      <input id="listName" type="text" placeholder="e.g. Book 1, page 12">
+    </label>
+
+    <div class="step">
+      <h3>1. Take a photo of Thai text <span class="muted">(or paste text below)</span></h3>
+      <div class="row">
+        <label class="btn primary file-btn">📷 Take photo
+          <input id="photoCam" type="file" accept="image/*" capture="environment" hidden>
+        </label>
+        <label class="btn file-btn">🖼️ Choose image
+          <input id="photoPick" type="file" accept="image/*" hidden>
+        </label>
+      </div>
+      <div id="ocrStatus" class="ocr-status hidden">
+        <div class="progress"><div id="ocrBar"></div></div>
+        <span id="ocrMsg">Reading Thai text…</span>
+      </div>
+      <img id="photoPreview" class="photo-preview hidden" alt="">
+    </div>
+
+    <div class="step">
+      <h3>2. Check the text</h3>
+      <textarea id="srcText" rows="4" placeholder="วางข้อความภาษาไทยที่นี่ / Paste Thai text here"></textarea>
+      <div class="row">
+        <button id="splitBtn" class="btn primary">✂️ Split into words</button>
+        <label class="check"><input id="dedupe" type="checkbox" checked> Remove duplicates</label>
+      </div>
+    </div>
+
+    <div class="step">
+      <h3>3. Words <span id="wordCount" class="muted"></span></h3>
+      <p class="hint">Tap a word to select it. Selected: <b>✕</b> deletes it, <b>⇥ Join</b> joins it with the next word, <b>✎</b> edits it.</p>
+      <div id="chips" class="chips"></div>
+      <div class="row chip-actions">
+        <button id="chipDel" class="btn small" disabled>✕ Delete</button>
+        <button id="chipJoin" class="btn small" disabled>⇥ Join next</button>
+        <button id="chipEdit" class="btn small" disabled>✎ Edit</button>
+        <button id="chipSay" class="btn small" disabled>🔊 Hear</button>
+      </div>
+      <div class="row">
+        <input id="addWord" type="text" placeholder="Add a word">
+        <button id="addWordBtn" class="btn">Add</button>
+      </div>
+    </div>
+
+    <div class="row end">
+      <button id="deleteListBtn" class="btn danger hidden">Delete list</button>
+      <button id="saveListBtn" class="btn primary big">Save list</button>
+    </div>
+  </div>
+</section>
+
+<!-- GAME -->
+<section id="game" class="screen">
+  <div class="hud">
+    <button id="pauseBtn" class="btn ghost icon" title="Pause">⏸</button>
+    <div class="stat"><span class="k">Score</span><span id="hudScore" class="v">0</span></div>
+    <div class="stat"><span class="k">Streak</span><span id="hudStreak" class="v">0</span></div>
+    <div class="stat"><span class="k">Speed</span><span id="hudSpeed" class="v">1</span></div>
+    <div class="stat"><span class="k">Read</span><span id="hudRead" class="v">0</span></div>
+  </div>
+  <div class="game-body">
+    <div id="board" class="board">
+      <div id="dangerLine" class="danger-line"></div>
+    </div>
+    <div class="controls">
+      <div id="micBox" class="mic-box">
+        <span id="micDot" class="mic-dot"></span>
+        <span id="heard" class="heard">Mic off</span>
+      </div>
+      <button id="hintBtn" class="btn ctrl"><span>🔊 Hear it</span><small>½ points</small></button>
+      <button id="okBtn" class="btn ctrl ok">✓ He read it!</button>
+    </div>
+  </div>
+
+  <div id="pauseOverlay" class="overlay hidden">
+    <div class="dialog">
+      <h2>Paused</h2>
+      <button id="resumeBtn" class="btn primary big">▶ Resume</button>
+      <button id="quitBtn" class="btn">Quit to menu</button>
+    </div>
+  </div>
+
+  <div id="rescuePop" class="rescue-pop hidden">
+    <div id="rescueWord" class="rescue-word"></div>
+    <div class="row">
+      <button id="rescueSay" class="btn small">🔊</button>
+      <button id="rescueOk" class="btn small ok">✓ Read it</button>
+      <button id="rescueClose" class="btn small ghost">✕</button>
+    </div>
+  </div>
+
+  <div id="overOverlay" class="overlay hidden">
+    <div class="dialog wide">
+      <h2>Game over</h2>
+      <div class="final">
+        <div><span class="k">Score</span><span id="finScore" class="v big"></span></div>
+        <div><span class="k">Words read</span><span id="finRead" class="v"></span></div>
+        <div><span class="k">Best streak</span><span id="finStreak" class="v"></span></div>
+        <div><span class="k">Avg. time</span><span id="finAvg" class="v"></span></div>
+      </div>
+      <p id="finBest" class="best"></p>
+      <div id="finMissedWrap">
+        <h3>Words to practise</h3>
+        <div id="finMissed" class="chips"></div>
+      </div>
+      <div class="row center">
+        <button id="againBtn" class="btn primary big">Play again</button>
+        <button id="menuBtn" class="btn">Menu</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" defer></script>
+<script src="app.js" defer></script>
+</body>
+</html>
