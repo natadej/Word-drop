@@ -239,16 +239,19 @@ async function geminiOcr(file, msg, bar) {
   msg.textContent = 'Gemini AI is reading the Thai text…'; bar.style.width = '40%';
   const prompt = 'Read all the Thai text in this image exactly as written (it is from a children\'s reading book or worksheet). '
     + 'Return JSON: {"text": the full Thai text in reading order, "words": the text split into individual Thai words in reading order, without punctuation, numbers or non-Thai text}.';
-  const model = settings.geminiModel || 'gemini-2.5-flash';
-  const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': settings.gemini },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: 'image/jpeg', data: await blobToBase64(blob) } }] }],
-      generationConfig: { responseMimeType: 'application/json', temperature: 0 },
-    }),
+  const body = JSON.stringify({
+    contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: 'image/jpeg', data: await blobToBase64(blob) } }] }],
+    generationConfig: { responseMimeType: 'application/json', temperature: 0 },
   });
-  const data = await resp.json();
+  const models = [settings.geminiModel, 'gemini-3.5-flash-lite', 'gemini-flash-lite-latest'].filter(Boolean);
+  let resp, data;
+  for (const model of models) {
+    resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': settings.gemini }, body,
+    });
+    data = await resp.json();
+    if (resp.status !== 404) break;
+  }
   if (!resp.ok) throw new Error(data.error?.message || resp.statusText);
   const raw = data.candidates?.[0]?.content?.parts?.map((p) => p.text).join('') || '{}';
   const out = JSON.parse(raw.replace(/^```(json)?|```$/g, ''));
