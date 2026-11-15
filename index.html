@@ -57,6 +57,9 @@
         <option value="parent">Parent button only</option>
       </select>
     </label>
+    <label class="full-col">Gemini API key <span class="muted">(optional: very accurate photo reading)</span>
+      <input id="setGemini" type="password" autocomplete="off" placeholder="Paste key from aistudio.google.com">
+    </label>
     <p id="micSupport" class="hint"></p>
   </div>
 </section>
@@ -81,7 +84,17 @@
         <label class="btn file-btn">🖼️ Choose image
           <input id="photoPick" type="file" accept="image/*" hidden>
         </label>
+        <button id="pasteBtn" class="btn">📋 Paste text</button>
       </div>
+      <p id="readerInfo" class="hint"></p>
+      <details class="lens-tip">
+        <summary>Most accurate free way: Google Lens</summary>
+        <ol>
+          <li>Open the photo in Google Photos or the camera, and tap <b>Lens</b>.</li>
+          <li>Tap <b>Text</b>, then <b>Select all</b>, then <b>Copy</b>.</li>
+          <li>Come back here and tap <b>📋 Paste text</b>.</li>
+        </ol>
+      </details>
       <div id="ocrStatus" class="ocr-status hidden">
         <div class="progress"><div id="ocrBar"></div></div>
         <span id="ocrMsg">Reading Thai text…</span>

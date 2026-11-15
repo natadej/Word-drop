@@ -128,3 +128,8 @@ label input[type=text]{width:100%}
 .pass-bar{position:relative;height:14px;background:var(--bg);border-radius:7px;overflow:visible}
 .pass-bar div{height:100%;border-radius:7px;background:var(--accent);width:0;transition:width .8s}
 .pass-bar .mark{position:absolute;left:80%;top:-4px;bottom:-4px;width:3px;background:#fff;border-radius:2px}
+.settings .full-col{grid-column:1/-1}
+.settings input[type=password]{font:inherit;font-size:16px;background:var(--bg);color:var(--text);border:2px solid var(--surface2);border-radius:10px;padding:8px 10px;width:100%}
+.lens-tip{margin-top:8px;font-size:15px;color:var(--muted)}
+.lens-tip summary{cursor:pointer;color:var(--accent);font-weight:600}
+.lens-tip ol{margin:6px 0 0;padding-left:22px}

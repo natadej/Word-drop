@@ -135,6 +135,8 @@ async function shareList(l) {
     await navigator.clipboard.writeText(url); toast('Link copied');
   } catch { prompt('Copy this link', url); }
 }
+$('#setGemini').value = settings.gemini || '';
+$('#setGemini').onchange = (e) => { settings.gemini = e.target.value.trim(); save(SETTINGS_KEY, settings); };
 ['setSpeed', 'setOrder', 'setMic'].forEach((id) => {
   $('#' + id).onchange = (e) => { settings[id.slice(3).toLowerCase()] = e.target.value; save(SETTINGS_KEY, settings); renderLevels(); };
 });
@@ -151,6 +153,9 @@ function openEditor(list) {
   $('#photoPreview').classList.add('hidden');
   $('#ocrStatus').classList.add('hidden');
   $('#deleteListBtn').classList.toggle('hidden', !list);
+  $('#readerInfo').textContent = settings.gemini
+    ? 'Photos are read by Gemini AI (accurate).'
+    : 'Photos are read by the free built-in reader, which makes mistakes. For better accuracy, use Google Lens (below) or add a Gemini key in Game settings.';
   renderChips();
   show('editor');
 }
@@ -202,24 +207,77 @@ $('#deleteListBtn').onclick = () => {
   show('home'); renderHome();
 };
 
-async function prepImage(file) {
+async function prepImage(file, enhance = true) {
   const img = await createImageBitmap(file);
   const max = 2000;
   const scale = Math.min(1, max / Math.max(img.width, img.height));
   const cv = document.createElement('canvas');
   cv.width = Math.round(img.width * scale); cv.height = Math.round(img.height * scale);
   const ctx = cv.getContext('2d');
-  ctx.filter = 'grayscale(1) contrast(1.4)';
+  if (enhance) ctx.filter = 'grayscale(1) contrast(1.4)';
   ctx.drawImage(img, 0, 0, cv.width, cv.height);
   return cv;
 }
+$('#pasteBtn').onclick = async () => {
+  try {
+    const t = await navigator.clipboard.readText();
+    if (!t || !THAI_RE.test(t)) { toast('No Thai text on the clipboard'); return; }
+    $('#srcText').value = ($('#srcText').value ? $('#srcText').value + '\n' : '') + t.trim();
+    $('#splitBtn').click();
+  } catch {
+    $('#srcText').focus();
+    toast('Long-press the text box and choose Paste', 3000);
+  }
+};
+
+function blobToBase64(blob) {
+  return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result.split(',')[1]); r.onerror = rej; r.readAsDataURL(blob); });
+}
+async function geminiOcr(file, msg, bar) {
+  const canvas = await prepImage(file, false);
+  const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.9));
+  msg.textContent = 'Gemini AI is reading the Thai text…'; bar.style.width = '40%';
+  const prompt = 'Read all the Thai text in this image exactly as written (it is from a children\'s reading book or worksheet). '
+    + 'Return JSON: {"text": the full Thai text in reading order, "words": the text split into individual Thai words in reading order, without punctuation, numbers or non-Thai text}.';
+  const model = settings.geminiModel || 'gemini-2.5-flash';
+  const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': settings.gemini },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: 'image/jpeg', data: await blobToBase64(blob) } }] }],
+      generationConfig: { responseMimeType: 'application/json', temperature: 0 },
+    }),
+  });
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data.error?.message || resp.statusText);
+  const raw = data.candidates?.[0]?.content?.parts?.map((p) => p.text).join('') || '{}';
+  const out = JSON.parse(raw.replace(/^```(json)?|```$/g, ''));
+  return { text: String(out.text || ''), words: (out.words || []).map((w) => String(w).replace(/[^\u0E00-\u0E7F]/g, '')).filter(Boolean) };
+}
+
 async function runOcr(file) {
   if (!file) return;
   $('#photoPreview').src = URL.createObjectURL(file);
   $('#photoPreview').classList.remove('hidden');
-  if (!window.Tesseract) { toast('Text reader still loading — try again in a moment'); return; }
   $('#ocrStatus').classList.remove('hidden');
   const bar = $('#ocrBar'), msg = $('#ocrMsg');
+  if (settings.gemini) {
+    try {
+      const { text, words } = await geminiOcr(file, msg, bar);
+      if (!words.length) { msg.textContent = 'No Thai text found. Try a clearer, closer photo.'; return; }
+      $('#srcText').value = ($('#srcText').value ? $('#srcText').value + '\n' : '') + text;
+      const dd = $('#dedupe').checked;
+      edit.words = dd ? [...new Set([...edit.words, ...words])] : [...edit.words, ...words];
+      edit.sel = -1; renderChips();
+      bar.style.width = '100%';
+      msg.textContent = `Done: ${words.length} words. Check them, then save.`;
+    } catch (e) {
+      console.error(e);
+      msg.textContent = 'Gemini could not read the photo: ' + (e.message || e) + '. Check the key in Game settings.';
+    }
+    return;
+  }
+  if (!window.Tesseract) { toast('Text reader still loading — try again in a moment'); return; }
   bar.style.width = '0%'; msg.textContent = 'Loading Thai reader (first time takes a little while)…';
   try {
     const canvas = await prepImage(file);
