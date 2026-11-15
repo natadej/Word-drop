@@ -2,88 +2,244 @@
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 
-const STORE_KEY = 'twd.lists.v1';
-const SETTINGS_KEY = 'twd.settings.v1';
-const BEST_KEY = 'twd.progress.v1';
-
-const STARTER = {
-  id: 'starter', builtin: true, name: 'Starter words (คำง่าย)',
-  words: ['แม่','พ่อ','ไก่','ปลา','หมา','แมว','บ้าน','น้ำ','ข้าว','ไข่','ตา','มือ','ขา','รถ','ไฟ','ดี','กิน','นอน','เล่น','ใหญ่','เล็ก','ร้อน','เย็น','หนังสือ','โรงเรียน','ครู','เพื่อน','ช้าง','ม้า','นก','ต้นไม้','ดอกไม้','ทะเล','ภูเขา','ฝน','แดด','ลม','กล้วย','มะม่วง','ส้ม','นม','ขนม','วิ่ง','เดิน','อ่าน'],
-};
-
-const THAI_RE = /[\u0E00-\u0E7F]/;
+// ---------- constants ----------
+const K = { lists: 'twd.lists.v1', settings: 'twd.settings.v1', progress: 'twd.progress.v2', profiles: 'twd.profiles.v1', days: 'twd.days.v1' };
+const LEVEL_SIZE = 15, PASS_PCT = 80, MAX_PTS = 100;
+const SUBJECTS = { th: 'Thai', en: 'English', zh: 'Chinese', math: 'Math', mix: 'Mix' };
+const LANG_NAME = { th: 'Thai', en: 'English', zh: 'Simplified Chinese' };
+const SR_LANG = { th: 'th-TH', en: 'en-US', zh: 'zh-CN' };
+const OCR_LANG = { th: 'tha', en: 'eng', zh: 'chi_sim', math: 'eng' };
+const THAI_RE = /[\u0E00-\u0E7F]/, HAN_RE = /[\u3400-\u9FFF]/, LATIN_RE = /[A-Za-z]/;
 const TILE_COLORS = ['#ff6b6b','#ffa94d','#ffd43b','#69db7c','#38d9a9','#4dabf7','#748ffc','#da77f2','#f783ac'];
 
 // ---------- storage ----------
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
 const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
-let lists = load(STORE_KEY, []);
-let settings = Object.assign({ speed: '3', order: 'shuffle', mic: 'mic', listId: 'starter' }, load(SETTINGS_KEY, {}));
-if (+settings.speed > 5) settings.speed = '3';
-let progress = load(BEST_KEY, {});
-const allLists = () => [STARTER, ...lists];
-const getList = (id) => allLists().find((l) => l.id === id) || STARTER;
+let lists = load(K.lists, []).map((l) => ({ subject: 'th', ...l }));
+let settings = Object.assign({ subject: 'th', listId: {} }, load(K.settings, {}));
+if (typeof settings.listId !== 'object' || !settings.listId) settings.listId = {};
+let profiles = load(K.profiles, []);
+let progress = load(K.progress, {});
+let days = load(K.days, {});
+const oldProgress = load('twd.progress.v1', null);
+const saveAll = () => { save(K.lists, lists); save(K.settings, settings); save(K.profiles, profiles); save(K.progress, progress); save(K.days, days); };
+
+const newProfile = (name, age) => ({ id: 'p' + Date.now(), name, age, speed: '3', goal: '2', mathLang: 'en-US', order: 'shuffle', mic: 'mic' });
+const profile = () => profiles.find((p) => p.id === settings.profileId) || profiles[0];
+const band = (age) => (age <= 6 ? '4-6' : age <= 9 ? '7-9' : '10-12');
 
 // ---------- utils ----------
-function show(id) {
-  $$('.screen').forEach((s) => s.classList.toggle('active', s.id === id));
-  window.scrollTo(0, 0);
-}
+function show(id) { $$('.screen').forEach((s) => s.classList.toggle('active', s.id === id)); window.scrollTo(0, 0); }
 let toastTimer;
 function toast(msg, ms = 2200) {
-  const t = $('#toast');
-  t.textContent = msg; t.classList.remove('hidden');
+  const t = $('#toast'); t.textContent = msg; t.classList.remove('hidden');
   clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.add('hidden'), ms);
 }
 const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
-const normalize = (s) => (s || '').normalize('NFC').replace(/[\s\u200b\u200c\u200d.,!?'"“”‘’()\-–—ๆฯ]/g, '');
-const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const normalize = (s) => (s || '').normalize('NFC').toLowerCase().replace(/[\s\u200b\u200c\u200d.,!?'"“”‘’()\-–—ๆฯ，。！？、]/g, '');
+const today = () => dateKey(new Date());
+function dateKey(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+const srLang = (lang) => (lang === 'math' ? profile().mathLang : SR_LANG[lang]);
 
-let thaiVoice = null;
-function pickVoice() {
-  const vs = speechSynthesis.getVoices();
-  thaiVoice = vs.find((v) => /^th/i.test(v.lang)) || null;
+// ---------- math ----------
+function parseExpr(s) {
+  const m = String(s).replace(/−/g, '-').match(/^\s*(\d+(?:\.\d+)?)\s*([+\-×x*÷/:])\s*(\d+(?:\.\d+)?)\s*(?:=\s*\??\s*)?$/i);
+  if (!m) return null;
+  const a = +m[1], b = +m[3], op = { '+': '+', '-': '−', '×': '×', x: '×', X: '×', '*': '×', '÷': '÷', '/': '÷', ':': '÷' }[m[2]];
+  const v = op === '+' ? a + b : op === '−' ? a - b : op === '×' ? a * b : b ? a / b : NaN;
+  return { text: `${a} ${op} ${b}`, answer: Math.round(v * 100) / 100 };
 }
-if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
-function say(word) {
+function extractExprs(text) {
+  const out = [];
+  const re = /(\d+(?:\.\d+)?)\s*([+\-−×xX*÷/])\s*(\d+(?:\.\d+)?)/g;
+  let m; while ((m = re.exec(text))) { const e = parseExpr(m[1] + m[2] + m[3]); if (e) out.push(e.text); }
+  return out;
+}
+function mathItem(b, lvl) {
+  const add = (max) => { const a = rand(0, max); return `${a} + ${rand(0, max - a)}`; };
+  const sub = (max) => { const a = rand(1, max); return `${a} − ${rand(0, a)}`; };
+  const addsub = (max) => (Math.random() < 0.5 ? add(max) : sub(max));
+  const mul = (lo, hi, n = 10) => `${rand(lo, hi)} × ${rand(1, n)}`;
+  const div = (lo, hi) => { const d = rand(lo, hi), q = rand(1, hi); return `${d * q} ÷ ${d}`; };
+  const pick = (...fs) => fs[rand(0, fs.length - 1)]();
+  if (b === '4-6') return [() => add(5), () => add(10), () => sub(10), () => addsub(10)][lvl]?.() ?? addsub(20);
+  if (b === '7-9') return [() => addsub(20), () => addsub(50), () => `${[2, 5, 10][rand(0, 2)]} × ${rand(1, 10)}`, () => mul(2, 9), () => div(2, 9)][lvl]?.()
+    ?? pick(() => addsub(100), () => mul(2, 10), () => div(2, 10));
+  return [() => mul(2, 12, 12), () => div(2, 12), () => addsub(1000), () => `${rand(11, 99)} × ${rand(2, 9)}`][lvl]?.()
+    ?? pick(() => mul(2, 12, 12), () => div(2, 12), () => addsub(1000), () => `${rand(11, 99)} × ${rand(2, 9)}`);
+}
+const EN_NUM = { zero: 0, oh: 0, one: 1, won: 1, two: 2, to: 2, too: 2, three: 3, four: 4, for: 4, five: 5, six: 6, seven: 7, eight: 8, ate: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90 };
+const TH_D = { 'ศูนย์': 0, 'หนึ่ง': 1, 'เอ็ด': 1, 'สอง': 2, 'ยี่': 2, 'สาม': 3, 'สี่': 4, 'ห้า': 5, 'หก': 6, 'เจ็ด': 7, 'แปด': 8, 'เก้า': 9 };
+const TH_U = { 'สิบ': 10, 'ร้อย': 100, 'พัน': 1000, 'หมื่น': 10000 };
+const ZH_D = { '零': 0, '〇': 0, '一': 1, '二': 2, '两': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9 };
+const ZH_U = { '十': 10, '百': 100, '千': 1000, '万': 10000 };
+function unitParse(toks, D, U) {
+  let total = 0, digit = null;
+  for (const t of toks) { if (t in D) digit = D[t]; else { total += (digit ?? 1) * U[t]; digit = null; } }
+  return total + (digit ?? 0);
+}
+function numbersIn(s) {
+  const found = [];
+  s = s.replace(/[๐-๙]/g, (c) => c.charCodeAt(0) - 0x0E50).toLowerCase();
+  for (const m of s.matchAll(/\d+(?:\.\d+)?/g)) found.push([m.index, +m[0]]);
+  const thTok = /ศูนย์|หนึ่ง|เอ็ด|สอง|ยี่|สาม|สี่|ห้า|หก|เจ็ด|แปด|เก้า|สิบ|ร้อย|พัน|หมื่น/g;
+  for (const m of s.matchAll(/(?:ศูนย์|หนึ่ง|เอ็ด|สอง|ยี่|สาม|สี่|ห้า|หก|เจ็ด|แปด|เก้า|สิบ|ร้อย|พัน|หมื่น)+/g)) found.push([m.index, unitParse(m[0].match(thTok), TH_D, TH_U)]);
+  for (const m of s.matchAll(/[零〇一二两三四五六七八九十百千万]+/g)) found.push([m.index, unitParse([...m[0]], ZH_D, ZH_U)]);
+  const re = /[a-z]+/g; let m, run = null;
+  const flush = () => { if (run) { found.push([run.i, run.total + run.cur]); run = null; } };
+  while ((m = re.exec(s))) {
+    const w = m[0];
+    if (w in EN_NUM) { run = run || { i: m.index, total: 0, cur: 0 }; run.cur += EN_NUM[w]; }
+    else if (w === 'hundred' && run) run.cur *= 100;
+    else if (w === 'thousand' && run) { run.total += run.cur * 1000; run.cur = 0; }
+    else if (w !== 'and' || !run) flush();
+  }
+  flush();
+  return found.sort((a, b) => a[0] - b[0]).map((x) => x[1]);
+}
+
+// ---------- items ----------
+function itemFor(text, lang) {
+  if (lang === 'math') { const e = parseExpr(text); return e ? { text: e.text + ' = ?', lang, answer: e.answer, plain: e.text } : null; }
+  return { text, lang };
+}
+function matches(item, alts) {
+  if (item.lang === 'math') return alts.some((a) => { const n = numbersIn(a); return n.length && n[n.length - 1] === item.answer; });
+  if (item.lang === 'en') {
+    const w = item.text.toLowerCase().replace(/[^a-z' ]/g, '').trim();
+    return alts.some((a) => (' ' + a.toLowerCase().replace(/[^a-z' ]/g, ' ').replace(/\s+/g, ' ') + ' ').includes(' ' + w + ' '));
+  }
+  const w = normalize(item.text);
+  return alts.some((a) => normalize(a).includes(w));
+}
+const sayText = (item) => (item.lang === 'math' ? String(item.answer) : item.text);
+
+// ---------- speech synthesis ----------
+function say(text, lang) {
   if (!('speechSynthesis' in window)) { toast('Speech not available on this device'); return; }
   speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(word);
-  u.lang = 'th-TH'; u.rate = 0.8;
-  if (thaiVoice) u.voice = thaiVoice;
-  if (recog.active) recog.pauseFor(1500 + word.length * 250);
+  const code = lang === 'math' ? profile().mathLang : SR_LANG[lang] || 'th-TH';
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = code; u.rate = 0.8;
+  const v = speechSynthesis.getVoices().find((x) => x.lang.replace('_', '-').toLowerCase().startsWith(code.slice(0, 2).toLowerCase()));
+  if (v) u.voice = v;
+  if (recog.active) recog.pauseFor(1500 + String(text).length * 200);
   speechSynthesis.speak(u);
 }
 
-// ---------- word segmentation ----------
-function cleanOcr(text) {
-  return text
-    .replace(/([\u0E00-\u0E7F])[ \t]+(?=[\u0E00-\u0E7F])/g, '$1')
-    .replace(/[|_~^`]/g, ' ');
-}
-function splitThai(text, dedupe) {
-  text = cleanOcr(text);
+// ---------- splitting ----------
+function cleanOcr(text) { return text.replace(/([\u0E00-\u0E7F\u3400-\u9FFF])[ \t]+(?=[\u0E00-\u0E7F\u3400-\u9FFF])/g, '$1').replace(/[|_~^`]/g, ' '); }
+function splitText(text, subject, dedupe) {
   let words = [];
-  if (window.Intl && Intl.Segmenter) {
-    const seg = new Intl.Segmenter('th', { granularity: 'word' });
-    for (const s of seg.segment(text)) if (s.isWordLike !== false && THAI_RE.test(s.segment)) words.push(s.segment.trim());
-  } else {
-    words = text.split(/\s+/).filter((w) => THAI_RE.test(w));
+  if (subject === 'math') words = extractExprs(text);
+  else if (subject === 'en') words = (text.match(/[A-Za-z]+(?:'[A-Za-z]+)?/g) || []).map((w) => (w === 'I' ? w : w.toLowerCase()));
+  else {
+    const re = subject === 'zh' ? HAN_RE : THAI_RE;
+    text = cleanOcr(text);
+    if (window.Intl && Intl.Segmenter) {
+      for (const s of new Intl.Segmenter(subject, { granularity: 'word' }).segment(text)) if (s.isWordLike !== false && re.test(s.segment)) words.push(s.segment.trim());
+    } else words = text.split(/\s+/).filter((w) => re.test(w));
+    const keep = subject === 'zh' ? /[^\u3400-\u9FFF]/g : /[^\u0E00-\u0E7F]/g;
+    words = words.map((w) => w.replace(keep, '')).filter((w) => w && !/^[ๆฯ\u0E50-\u0E59]+$/.test(w));
   }
-  words = words.map((w) => w.replace(/[^\u0E00-\u0E7F]/g, '')).filter((w) => w && !/^[ๆฯ\u0E50-\u0E59]+$/.test(w));
-  if (dedupe) words = [...new Set(words)];
-  return words;
+  return dedupe ? [...new Set(words)] : words;
+}
+
+// ---------- lists & levels ----------
+function builtinList(subject) {
+  const b = band(profile().age);
+  if (subject === 'math') return { id: `b-math-${b}`, builtin: true, subject, name: `Age ${b} math`, gen: 'math', count: 8 };
+  if (subject === 'mix') return { id: `b-mix-${b}`, builtin: true, subject, name: `Age ${b} mix: Thai, English, 中文, Math`, gen: 'mix', count: 4 };
+  return { id: `b-${subject}-${b}`, builtin: true, subject, name: `Age ${b} words`, words: BANKS[subject][b] };
+}
+const subjectLists = (subject) => [builtinList(subject), ...(subject === 'mix' ? [] : lists.filter((l) => l.subject === subject))];
+const getList = (id) => ['th', 'en', 'zh', 'math', 'mix'].map(builtinList).find((l) => l.id === id) || lists.find((l) => l.id === id);
+const currentList = () => {
+  const s = settings.subject;
+  return subjectLists(s).find((l) => l.id === settings.listId[s]) || builtinList(s);
+};
+const levelCount = (l) => l.count || Math.max(1, Math.ceil(l.words.length / LEVEL_SIZE));
+const levelSec = (i) => Math.max(1.8, +profile().speed - 0.1 * i);
+const prog = (listId) => { const p = progress[profile().id] || (progress[profile().id] = {}); return p[listId] || (p[listId] = {}); };
+const isUnlocked = (listId, i) => i === 0 || (prog(listId)[i - 1]?.pct ?? 0) >= PASS_PCT;
+const noAdjDup = (items) => { for (let k = 0; k < 30; k++) { shuffle(items); if (!items.some((w, j) => j && items[j - 1].text === w.text)) break; } return items; };
+function levelItems(list, i) {
+  const b = band(profile().age);
+  if (list.gen === 'math') {
+    const seen = new Set(), out = [];
+    for (let k = 0; out.length < LEVEL_SIZE && k < 500; k++) { const e = mathItem(b, i); if (!seen.has(e) || k > 200) { seen.add(e); out.push(itemFor(e, 'math')); } }
+    return out;
+  }
+  if (list.gen === 'mix') {
+    const pickN = (arr, n) => shuffle([...arr]).slice(0, n);
+    const items = [
+      ...pickN(BANKS.th[b], 4).map((w) => itemFor(w, 'th')),
+      ...pickN(BANKS.en[b], 4).map((w) => itemFor(w, 'en')),
+      ...pickN(BANKS.zh[b], 4).map((w) => itemFor(w, 'zh')),
+      ...Array.from({ length: 3 }, () => itemFor(mathItem(b, i + 1), 'math')),
+    ];
+    return noAdjDup(items);
+  }
+  const all = list.words;
+  const words = all.slice(i * LEVEL_SIZE, (i + 1) * LEVEL_SIZE);
+  const pool = shuffle(all.filter((w) => !words.includes(w)));
+  const base = shuffle([...all]);
+  while (words.length < LEVEL_SIZE && all.length) {
+    const w = pool.length ? pool.shift() : base[words.length % base.length];
+    if (words[words.length - 1] !== w || all.length === 1) words.push(w); else base.push(base.shift());
+  }
+  const items = words.map((w) => itemFor(w, list.subject)).filter(Boolean);
+  return profile().order === 'shuffle' ? noAdjDup(items) : items;
+}
+function nextLevelIdx(list) {
+  const p = prog(list.id);
+  for (let i = 0; i < levelCount(list); i++) if ((p[i]?.pct ?? 0) < PASS_PCT) return i;
+  return 0;
+}
+
+// ---------- daily record ----------
+const dayRec = (key = today()) => { const d = days[profile().id] || (days[profile().id] = {}); return d[key] || { played: 0, passed: 0, read: 0, score: 0 }; };
+function recordDay(passed, read, score) {
+  const d = days[profile().id] || (days[profile().id] = {});
+  const r = d[today()] || { played: 0, passed: 0, read: 0, score: 0 };
+  r.played++; if (passed) r.passed++; r.read += read; r.score += score;
+  d[today()] = r; save(K.days, days);
+  return r;
+}
+function streak() {
+  const goal = +profile().goal; let n = 0;
+  const d = new Date();
+  if (dayRec(dateKey(d)).passed < goal) d.setDate(d.getDate() - 1);
+  while (dayRec(dateKey(d)).passed >= goal) { n++; d.setDate(d.getDate() - 1); }
+  return n;
+}
+function renderToday() {
+  const goal = +profile().goal, r = dayRec();
+  const done = r.passed >= goal;
+  $('#todayText').textContent = done ? `Daily goal done! ${r.passed}/${goal} passed ✓` : `${r.passed}/${goal} levels passed`;
+  $('#goalBar').style.width = Math.min(100, r.passed / goal * 100) + '%';
+  $('#streakNum').textContent = streak();
+  const row = $('#daysRow'); row.innerHTML = '';
+  for (let k = 13; k >= 0; k--) {
+    const d = new Date(); d.setDate(d.getDate() - k);
+    const rec = dayRec(dateKey(d));
+    const el = document.createElement('div');
+    el.className = 'day' + (rec.passed >= goal ? ' passed' : rec.played ? ' played' : '') + (k === 0 ? ' today' : '');
+    el.title = `${dateKey(d)}: ${rec.passed} passed, ${rec.played} played`;
+    el.innerHTML = `<i>${rec.passed >= goal ? '✓' : rec.passed || ''}</i><span>${'SMTWTFS'[d.getDay()]}</span>`;
+    row.appendChild(el);
+  }
 }
 
 // ---------- share links ----------
 function encodeList(l) {
-  const json = JSON.stringify({ n: l.name, w: l.words });
-  return btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return btoa(unescape(encodeURIComponent(JSON.stringify({ n: l.name, w: l.words, s: l.subject })))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 function decodeList(s) {
-  s = s.replace(/-/g, '+').replace(/_/g, '/');
-  const o = JSON.parse(decodeURIComponent(escape(atob(s))));
-  return { name: String(o.n || 'Shared list'), words: (o.w || []).map(String).filter(Boolean) };
+  const o = JSON.parse(decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace(/_/g, '/')))));
+  return { name: String(o.n || 'Shared list'), words: (o.w || []).map(String).filter(Boolean), subject: SUBJECTS[o.s] && o.s !== 'mix' ? o.s : 'th' };
 }
 function checkHashImport() {
   const m = location.hash.match(/list=([^&]+)/);
@@ -91,80 +247,157 @@ function checkHashImport() {
   try {
     const l = decodeList(m[1]);
     history.replaceState(null, '', location.pathname + location.search);
-    const existing = lists.find((x) => x.name === l.name && x.words.join('|') === l.words.join('|'));
-    if (existing) { settings.listId = existing.id; } else {
-      const nl = { id: 'l' + Date.now(), name: l.name, words: l.words };
-      lists.push(nl); save(STORE_KEY, lists); settings.listId = nl.id;
-    }
-    save(SETTINGS_KEY, settings);
-    toast(`Added list “${l.name}” (${l.words.length} words)`, 3500);
-  } catch (e) { toast('Could not read shared list link'); }
+    let ex = lists.find((x) => x.name === l.name && x.words.join('|') === l.words.join('|'));
+    if (!ex) { ex = { id: 'l' + Date.now(), ...l }; lists.push(ex); }
+    settings.subject = ex.subject; settings.listId[ex.subject] = ex.id; saveAll();
+    toast(`Added list “${l.name}” (${l.words.length})`, 3500);
+  } catch { toast('Could not read shared list link'); }
+}
+async function shareList(l) {
+  const url = location.origin + location.pathname + '#list=' + encodeList(l);
+  try { if (navigator.share) { await navigator.share({ title: l.name, url }); return; } await navigator.clipboard.writeText(url); toast('Link copied'); }
+  catch { prompt('Copy this link', url); }
 }
 
 // ---------- HOME ----------
 function renderHome() {
-  const ul = $('#listList');
-  ul.innerHTML = '';
-  for (const l of allLists()) {
+  if (!profile()) { openProfiles(true); return; }
+  const p = profile();
+  $('#profileName').textContent = `${p.name} · ${p.age}`;
+  renderToday();
+  $$('#subjectTabs button').forEach((b) => b.classList.toggle('sel', b.dataset.subject === settings.subject));
+  const s = settings.subject, cur = currentList();
+  $('#listsPanel').classList.toggle('hidden', s === 'mix');
+  const ul = $('#listList'); ul.innerHTML = '';
+  for (const l of subjectLists(s)) {
     const li = document.createElement('li');
-    li.className = 'list-item' + (l.id === settings.listId ? ' sel' : '');
-    const p = prog(l.id), n = levelCount(l);
-    const passedN = Object.values(p).filter((x) => x.pct >= PASS_PCT).length;
-    li.innerHTML = `<div class="name"><b>${escapeHtml(l.name)}</b><small>${l.words.length} words · ${escapeHtml(l.words.slice(0, 8).join(' '))}</small></div>
+    li.className = 'list-item' + (l.id === cur.id ? ' sel' : '');
+    const pr = prog(l.id), n = levelCount(l);
+    const passedN = Object.values(pr).filter((x) => x.pct >= PASS_PCT).length;
+    const preview = l.words ? l.words.slice(0, 8).join(' ') : `${n} levels`;
+    li.innerHTML = `<div class="name"><b>${escapeHtml(l.name)}${l.builtin ? '<span class="badge">by age</span>' : ''}</b><small class="${s}">${l.words ? l.words.length + ' · ' : ''}${escapeHtml(preview)}</small></div>
       <span class="best">${passedN}/${n} ✓</span>
-      <button class="btn small" data-act="play">▶ Play</button>
+      <button class="btn small" data-act="play">▶</button>
       ${l.builtin ? '' : '<button class="btn small ghost" data-act="edit">✎</button><button class="btn small ghost" data-act="share" title="Share link">🔗</button>'}`;
-    li.querySelector('.name').onclick = () => { settings.listId = l.id; save(SETTINGS_KEY, settings); renderHome(); };
-    li.querySelector('[data-act=play]').onclick = () => { settings.listId = l.id; save(SETTINGS_KEY, settings); startGame(); };
+    li.querySelector('.name').onclick = () => { settings.listId[s] = l.id; saveAll(); renderHome(); };
+    li.querySelector('[data-act=play]').onclick = () => { settings.listId[s] = l.id; saveAll(); startGame(l.id); };
     const e = li.querySelector('[data-act=edit]'); if (e) e.onclick = () => openEditor(l);
     const sh = li.querySelector('[data-act=share]'); if (sh) sh.onclick = () => shareList(l);
     ul.appendChild(li);
   }
   renderLevels();
-  $('#setSpeed').value = settings.speed;
-  $('#setOrder').value = settings.order;
-  $('#setMic').value = settings.mic;
+  $('#settingsTitle').textContent = `Settings for ${p.name}`;
+  $('#setSpeed').value = p.speed; $('#setGoal').value = p.goal; $('#setMathLang').value = p.mathLang;
+  $('#setOrder').value = p.order; $('#setMic').value = p.mic;
+  $('#setGemini').value = settings.gemini || '';
   $('#micSupport').textContent = recog.supported
-    ? 'Microphone checking uses Thai speech recognition (works best in Chrome). The parent button always works too.'
-    : 'This browser has no speech recognition. Use the “He read it!” button (try Chrome on Android for mic checking).';
+    ? 'The microphone listens in Thai, English or Chinese to match each word (works best in Chrome). The parent button always works too.'
+    : 'This browser has no speech recognition. Use the “He read it!” button (Chrome on Android supports the mic).';
 }
-async function shareList(l) {
-  const url = location.origin + location.pathname + '#list=' + encodeList(l);
-  try {
-    if (navigator.share) { await navigator.share({ title: l.name, url }); return; }
-    await navigator.clipboard.writeText(url); toast('Link copied');
-  } catch { prompt('Copy this link', url); }
+function renderLevels() {
+  const list = currentList();
+  $('#levelsTitle').textContent = `${SUBJECTS[list.subject]} levels: ${list.name}`;
+  const box = $('#levels'); box.innerHTML = '';
+  const p = prog(list.id);
+  for (let i = 0; i < levelCount(list); i++) {
+    const unlocked = isUnlocked(list.id, i), best = p[i], passed = best && best.pct >= PASS_PCT;
+    const b = document.createElement('button');
+    b.className = 'level-card' + (unlocked ? '' : ' locked') + (passed ? ' passed' : '');
+    const preview = list.words ? list.words.slice(i * LEVEL_SIZE, i * LEVEL_SIZE + 4).join(' ') + '…'
+      : list.gen === 'math' ? mathItem(band(profile().age), i) + ' …' : 'ไทย · ABC · 中文 · 1+2';
+    b.innerHTML = `<span class="lv">Level ${i + 1} · ${levelSec(i).toFixed(1)}s</span>
+      <span class="lv-name">${unlocked ? (passed ? '✓ Passed' : 'Play') : '🔒 Locked'}</span>
+      <span class="lv-desc ${list.subject}">${escapeHtml(preview)}</span>
+      ${best ? `<span class="lv-best">Best ${best.pct}% · ${best.score}</span>` : ''}`;
+    if (unlocked) b.onclick = () => startGame(list.id, i);
+    box.appendChild(b);
+  }
 }
-$('#setGemini').value = settings.gemini || '';
-$('#setGemini').onchange = (e) => { settings.gemini = e.target.value.trim(); save(SETTINGS_KEY, settings); };
-['setSpeed', 'setOrder', 'setMic'].forEach((id) => {
-  $('#' + id).onchange = (e) => { settings[id.slice(3).toLowerCase()] = e.target.value; save(SETTINGS_KEY, settings); renderLevels(); };
-});
+$$('#subjectTabs button').forEach((b) => (b.onclick = () => { settings.subject = b.dataset.subject; saveAll(); renderHome(); }));
+const bindProfileSetting = (id, key) => ($('#' + id).onchange = (e) => { profile()[key] = e.target.value; saveAll(); renderHome(); });
+bindProfileSetting('setSpeed', 'speed'); bindProfileSetting('setGoal', 'goal'); bindProfileSetting('setMathLang', 'mathLang');
+bindProfileSetting('setOrder', 'order'); bindProfileSetting('setMic', 'mic');
+$('#setGemini').onchange = (e) => { settings.gemini = e.target.value.trim(); saveAll(); };
 $('#newListBtn').onclick = () => openEditor(null);
 $$('[data-go]').forEach((b) => (b.onclick = () => { show(b.dataset.go); renderHome(); }));
 
+// ---------- PROFILES ----------
+let pfEditing = null;
+(() => { const s = $('#pfAge'); for (let a = 3; a <= 14; a++) s.add(new Option(String(a), a)); s.value = 7; })();
+function openProfiles(forceNew) {
+  const ul = $('#profileList'); ul.innerHTML = '';
+  for (const p of profiles) {
+    const li = document.createElement('li');
+    li.className = 'list-item' + (p.id === profile()?.id ? ' sel' : '');
+    li.innerHTML = `<div class="name"><b>${escapeHtml(p.name)}</b><small>Age ${p.age} · 🔥 ${p.id === profile()?.id ? streak() : ''}</small></div>
+      <button class="btn small" data-act="use">Play as</button><button class="btn small ghost" data-act="edit">✎</button>`;
+    li.querySelector('[data-act=use]').onclick = () => { settings.profileId = p.id; saveAll(); closeProfiles(); renderHome(); };
+    li.querySelector('[data-act=edit]').onclick = () => editProfile(p);
+    ul.appendChild(li);
+  }
+  ul.classList.toggle('hidden', !profiles.length);
+  editProfile(null);
+  $('#pfCancel').classList.toggle('hidden', !!forceNew && !profiles.length);
+  $('#profileOverlay').classList.remove('hidden');
+}
+function editProfile(p) {
+  pfEditing = p;
+  $('#pfTitle').textContent = p ? `Edit ${p.name}` : profiles.length ? 'Add another child' : 'Create a profile';
+  $('#pfName').value = p ? p.name : ''; $('#pfAge').value = p ? p.age : 7;
+  $('#pfDelete').classList.toggle('hidden', !p || profiles.length < 2);
+}
+function closeProfiles() { $('#profileOverlay').classList.add('hidden'); }
+$('#profileBtn').onclick = () => openProfiles(false);
+$('#pfCancel').onclick = closeProfiles;
+$('#pfSave').onclick = () => {
+  const name = $('#pfName').value.trim() || 'Luffy', age = +$('#pfAge').value;
+  if (pfEditing) Object.assign(pfEditing, { name, age });
+  else {
+    const np = newProfile(name, age);
+    if (!profiles.length && oldProgress) {
+      const old = load(K.settings, {});
+      if (old.speed && +old.speed <= 6) np.speed = String(old.speed);
+      progress[np.id] = oldProgress;
+    }
+    profiles.push(np); settings.profileId = np.id;
+  }
+  saveAll(); closeProfiles(); renderHome();
+};
+$('#pfDelete').onclick = () => {
+  if (!pfEditing || !confirm(`Delete ${pfEditing.name} and all their scores?`)) return;
+  profiles = profiles.filter((p) => p !== pfEditing);
+  delete progress[pfEditing.id]; delete days[pfEditing.id];
+  if (settings.profileId === pfEditing.id) settings.profileId = profiles[0]?.id;
+  saveAll(); closeProfiles(); renderHome();
+};
+
 // ---------- EDITOR ----------
 let edit = { list: null, words: [], sel: -1 };
+const edSubject = () => $('#listSubject').value;
 function openEditor(list) {
   edit = { list, words: list ? [...list.words] : [], sel: -1 };
-  $('#editorTitle').textContent = list ? 'Edit word list' : 'New word list';
+  $('#editorTitle').textContent = list ? 'Edit list' : 'New list';
   $('#listName').value = list ? list.name : '';
+  $('#listSubject').value = list ? list.subject : settings.subject === 'mix' ? 'th' : settings.subject;
   $('#srcText').value = '';
-  $('#photoPreview').classList.add('hidden');
-  $('#ocrStatus').classList.add('hidden');
+  $('#photoPreview').classList.add('hidden'); $('#ocrStatus').classList.add('hidden');
   $('#deleteListBtn').classList.toggle('hidden', !list);
-  $('#readerInfo').textContent = settings.gemini
-    ? 'Photos are read by Gemini AI (accurate).'
-    : 'Photos are read by the free built-in reader, which makes mistakes. For better accuracy, use Google Lens (below) or add a Gemini key in Game settings.';
-  renderChips();
-  show('editor');
+  updateEditorInfo(); renderChips(); show('editor');
 }
+function updateEditorInfo() {
+  const g = !!settings.gemini;
+  $('#readerInfo').textContent = g ? 'Photos are read by Gemini AI (accurate).'
+    : 'Photos are read by the free built-in reader, which makes mistakes. For better accuracy use Google Lens (below), or add a Gemini key in Settings.';
+  $('#moreLike').parentElement.classList.toggle('hidden', !g);
+  $('#aiGenRow').classList.toggle('hidden', !g);
+  $('#aiGenBtn').textContent = `✨ Make ${edSubject() === 'math' ? 'problems' : 'words'} for age ${profile().age}`;
+}
+$('#listSubject').onchange = updateEditorInfo;
 function renderChips() {
-  const c = $('#chips');
-  c.innerHTML = '';
+  const c = $('#chips'); c.innerHTML = '';
   edit.words.forEach((w, i) => {
     const b = document.createElement('button');
-    b.className = 'chip' + (i === edit.sel ? ' sel' : '');
+    b.className = 'chip ' + edSubject() + (i === edit.sel ? ' sel' : '');
     b.textContent = w;
     b.onclick = () => { edit.sel = edit.sel === i ? -1 : i; renderChips(); };
     c.appendChild(b);
@@ -174,43 +407,54 @@ function renderChips() {
   $('#chipDel').disabled = !has; $('#chipEdit').disabled = !has; $('#chipSay').disabled = !has;
   $('#chipJoin').disabled = !(has && edit.sel < edit.words.length - 1);
 }
+function addWords(words) {
+  edit.words = $('#dedupe').checked ? [...new Set([...edit.words, ...words])] : [...edit.words, ...words];
+  edit.sel = -1; renderChips();
+}
 $('#chipDel').onclick = () => { edit.words.splice(edit.sel, 1); edit.sel = Math.min(edit.sel, edit.words.length - 1); renderChips(); };
-$('#chipJoin').onclick = () => { const i = edit.sel; edit.words.splice(i, 2, edit.words[i] + edit.words[i + 1]); renderChips(); };
-$('#chipEdit').onclick = () => { const v = prompt('Edit word', edit.words[edit.sel]); if (v && v.trim()) { edit.words[edit.sel] = v.trim(); renderChips(); } };
-$('#chipSay').onclick = () => say(edit.words[edit.sel]);
+$('#chipJoin').onclick = () => { const i = edit.sel, sep = edSubject() === 'en' ? ' ' : ''; edit.words.splice(i, 2, edit.words[i] + sep + edit.words[i + 1]); renderChips(); };
+$('#chipEdit').onclick = () => { const v = prompt('Edit', edit.words[edit.sel]); if (v && v.trim()) { edit.words[edit.sel] = v.trim(); renderChips(); } };
+$('#chipSay').onclick = () => { const it = itemFor(edit.words[edit.sel], edSubject()); if (it) say(sayText(it), it.lang); };
 function addWord() {
-  const v = $('#addWord').value.trim();
-  if (!v) return;
-  edit.words.push(...v.split(/\s+/)); $('#addWord').value = ''; renderChips();
+  const v = $('#addWord').value.trim(); if (!v) return;
+  if (edSubject() === 'math') { const e = parseExpr(v); if (!e) { toast('Write it like 7 + 5'); return; } addWords([e.text]); }
+  else addWords(edSubject() === 'en' ? [v] : v.split(/\s+/));
+  $('#addWord').value = '';
 }
 $('#addWordBtn').onclick = addWord;
 $('#addWord').onkeydown = (e) => { if (e.key === 'Enter') addWord(); };
 $('#splitBtn').onclick = () => {
-  const words = splitThai($('#srcText').value, $('#dedupe').checked);
-  if (!words.length) { toast('No Thai words found'); return; }
-  edit.words = $('#dedupe').checked ? [...new Set([...edit.words, ...words])] : [...edit.words, ...words];
-  edit.sel = -1; renderChips();
-  toast(`Found ${words.length} words`);
+  const words = splitText($('#srcText').value, edSubject(), $('#dedupe').checked);
+  if (!words.length) { toast(edSubject() === 'math' ? 'No sums found (write them like 7 + 5)' : 'No words found for this subject'); return; }
+  addWords(words); toast(`Found ${words.length}`);
 };
 $('#saveListBtn').onclick = () => {
   if (!edit.words.length) { toast('Add some words first'); return; }
-  const name = $('#listName').value.trim() || `List ${new Date().toLocaleDateString()}`;
-  if (edit.list) { Object.assign(lists.find((l) => l.id === edit.list.id), { name, words: edit.words }); }
-  else { const nl = { id: 'l' + Date.now(), name, words: edit.words }; lists.push(nl); settings.listId = nl.id; save(SETTINGS_KEY, settings); }
-  save(STORE_KEY, lists);
-  show('home'); renderHome(); toast('Saved');
+  const subject = edSubject();
+  const name = $('#listName').value.trim() || `${SUBJECTS[subject]} ${new Date().toLocaleDateString()}`;
+  if (edit.list) Object.assign(lists.find((l) => l.id === edit.list.id), { name, words: edit.words, subject });
+  else { const nl = { id: 'l' + Date.now(), name, words: edit.words, subject }; lists.push(nl); settings.listId[subject] = nl.id; }
+  settings.subject = subject; saveAll(); show('home'); renderHome(); toast('Saved');
 };
 $('#deleteListBtn').onclick = () => {
   if (!confirm('Delete this list?')) return;
-  lists = lists.filter((l) => l.id !== edit.list.id); save(STORE_KEY, lists);
-  if (settings.listId === edit.list.id) { settings.listId = 'starter'; save(SETTINGS_KEY, settings); }
-  show('home'); renderHome();
+  lists = lists.filter((l) => l.id !== edit.list.id);
+  if (settings.listId[edit.list.subject] === edit.list.id) delete settings.listId[edit.list.subject];
+  saveAll(); show('home'); renderHome();
+};
+$('#pasteBtn').onclick = async () => {
+  try {
+    const t = await navigator.clipboard.readText();
+    if (!t || !t.trim()) { toast('Clipboard is empty'); return; }
+    $('#srcText').value = ($('#srcText').value ? $('#srcText').value + '\n' : '') + t.trim();
+    $('#splitBtn').click();
+  } catch { $('#srcText').focus(); toast('Long-press the text box and choose Paste', 3000); }
 };
 
+// ---------- OCR / Gemini ----------
 async function prepImage(file, enhance = true) {
   const img = await createImageBitmap(file);
-  const max = 2000;
-  const scale = Math.min(1, max / Math.max(img.width, img.height));
+  const scale = Math.min(1, 2000 / Math.max(img.width, img.height));
   const cv = document.createElement('canvas');
   cv.width = Math.round(img.width * scale); cv.height = Math.round(img.height * scale);
   const ctx = cv.getContext('2d');
@@ -218,140 +462,136 @@ async function prepImage(file, enhance = true) {
   ctx.drawImage(img, 0, 0, cv.width, cv.height);
   return cv;
 }
-$('#pasteBtn').onclick = async () => {
-  try {
-    const t = await navigator.clipboard.readText();
-    if (!t || !THAI_RE.test(t)) { toast('No Thai text on the clipboard'); return; }
-    $('#srcText').value = ($('#srcText').value ? $('#srcText').value + '\n' : '') + t.trim();
-    $('#splitBtn').click();
-  } catch {
-    $('#srcText').focus();
-    toast('Long-press the text box and choose Paste', 3000);
-  }
-};
-
-function blobToBase64(blob) {
-  return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result.split(',')[1]); r.onerror = rej; r.readAsDataURL(blob); });
-}
-async function geminiOcr(file, msg, bar) {
-  const canvas = await prepImage(file, false);
-  const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.9));
-  msg.textContent = 'Gemini AI is reading the Thai text…'; bar.style.width = '40%';
-  const prompt = 'Read all the Thai text in this image exactly as written (it is from a children\'s reading book or worksheet). '
-    + 'Return JSON: {"text": the full Thai text in reading order, "words": the text split into individual Thai words in reading order, without punctuation, numbers or non-Thai text}.';
-  const body = JSON.stringify({
-    contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: 'image/jpeg', data: await blobToBase64(blob) } }] }],
-    generationConfig: { responseMimeType: 'application/json', temperature: 0 },
-  });
-  const models = [settings.geminiModel, 'gemini-3.5-flash-lite', 'gemini-flash-lite-latest'].filter(Boolean);
+const blobToBase64 = (blob) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result.split(',')[1]); r.onerror = rej; r.readAsDataURL(blob); });
+async function gemini(parts) {
+  const body = JSON.stringify({ contents: [{ parts }], generationConfig: { responseMimeType: 'application/json', temperature: 0.2 } });
   let resp, data;
-  for (const model of models) {
+  const models = [settings.geminiModel, 'gemini-3.5-flash-lite', 'gemini-flash-lite-latest', 'gemini-3.5-flash-lite'].filter(Boolean);
+  for (const [i, model] of models.entries()) {
+    if (i && resp?.status !== 404) await new Promise((r) => setTimeout(r, 1500));
     resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': settings.gemini }, body,
     });
     data = await resp.json();
-    if (resp.status !== 404) break;
+    if (![404, 429, 500, 503].includes(resp.status)) break;
   }
   if (!resp.ok) throw new Error(data.error?.message || resp.statusText);
   const raw = data.candidates?.[0]?.content?.parts?.map((p) => p.text).join('') || '{}';
-  const out = JSON.parse(raw.replace(/^```(json)?|```$/g, ''));
-  return { text: String(out.text || ''), words: (out.words || []).map((w) => String(w).replace(/[^\u0E00-\u0E7F]/g, '')).filter(Boolean) };
+  return JSON.parse(raw.replace(/^\s*```(json)?|```\s*$/g, ''));
 }
-
+function cleanAiItems(arr, subject) {
+  arr = (arr || []).map(String);
+  if (subject === 'math') return arr.map((s) => parseExpr(s)?.text).filter(Boolean);
+  if (subject === 'en') return arr.map((w) => w.trim().replace(/[^A-Za-z' ]/g, '')).filter(Boolean);
+  const keep = subject === 'zh' ? /[^\u3400-\u9FFF]/g : /[^\u0E00-\u0E7F]/g;
+  return arr.map((w) => w.replace(keep, '')).filter(Boolean);
+}
+function photoPrompt(subject, more) {
+  const age = profile().age;
+  if (subject === 'math') return `This image is from a child's math book or worksheet. Extract every arithmetic problem, written like "7 + 5" using only whole numbers and one of + − × ÷. `
+    + `Return JSON {"text": the problems one per line, "items": [the problems], "more": [${more ? '30 NEW different problems of the same type and difficulty' : ''}]}.`;
+  const L = LANG_NAME[subject];
+  return `This image is from a ${age}-year-old child's ${L} reading book or worksheet. Read all the ${L} text exactly as written. `
+    + `Return JSON {"text": the full ${L} text in reading order, "items": the text split into individual ${L} words in reading order${subject === 'en' ? '' : ', segmented as a native teacher would'}, without punctuation, numbers or text in other languages, `
+    + `"more": [${more ? `30 NEW different ${L} words at the same reading difficulty and similar topics, suitable for this child, not already in items` : ''}]}.`;
+}
 async function runOcr(file) {
   if (!file) return;
-  $('#photoPreview').src = URL.createObjectURL(file);
-  $('#photoPreview').classList.remove('hidden');
+  const subject = edSubject();
+  $('#photoPreview').src = URL.createObjectURL(file); $('#photoPreview').classList.remove('hidden');
   $('#ocrStatus').classList.remove('hidden');
   const bar = $('#ocrBar'), msg = $('#ocrMsg');
+  bar.style.width = '10%';
   if (settings.gemini) {
     try {
-      const { text, words } = await geminiOcr(file, msg, bar);
-      if (!words.length) { msg.textContent = 'No Thai text found. Try a clearer, closer photo.'; return; }
-      $('#srcText').value = ($('#srcText').value ? $('#srcText').value + '\n' : '') + text;
-      const dd = $('#dedupe').checked;
-      edit.words = dd ? [...new Set([...edit.words, ...words])] : [...edit.words, ...words];
-      edit.sel = -1; renderChips();
+      const more = $('#moreLike').checked;
+      msg.textContent = 'Gemini AI is reading the photo…'; bar.style.width = '40%';
+      const canvas = await prepImage(file, false);
+      const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.9));
+      const out = await gemini([{ text: photoPrompt(subject, more) }, { inline_data: { mime_type: 'image/jpeg', data: await blobToBase64(blob) } }]);
+      const items = cleanAiItems(out.items, subject), extra = cleanAiItems(out.more, subject);
+      if (!items.length && !extra.length) { msg.textContent = `No ${SUBJECTS[subject]} found. Check the subject, or try a clearer photo.`; return; }
+      if (out.text) $('#srcText').value = ($('#srcText').value ? $('#srcText').value + '\n' : '') + String(out.text);
+      addWords([...items, ...extra]);
       bar.style.width = '100%';
-      msg.textContent = `Done: ${words.length} words. Check them, then save.`;
-    } catch (e) {
-      console.error(e);
-      msg.textContent = 'Gemini could not read the photo: ' + (e.message || e) + '. Check the key in Game settings.';
-    }
+      msg.textContent = `Done: ${items.length} from the photo${extra.length ? ` + ${extra.length} more at the same level` : ''}. Check them, then save.`;
+    } catch (e) { console.error(e); msg.textContent = 'Gemini could not read the photo: ' + (e.message || e) + '. Check the key in Settings.'; }
     return;
   }
-  if (!window.Tesseract) { toast('Text reader still loading — try again in a moment'); return; }
-  bar.style.width = '0%'; msg.textContent = 'Loading Thai reader (first time takes a little while)…';
+  if (!window.Tesseract) { toast('Text reader still loading, try again in a moment'); return; }
+  msg.textContent = 'Loading reader (first time takes a little while)…';
   try {
     const canvas = await prepImage(file);
-    const { data } = await Tesseract.recognize(canvas, 'tha', {
-      logger: (m) => {
-        if (m.status === 'recognizing text') { bar.style.width = Math.round(m.progress * 100) + '%'; msg.textContent = `Reading Thai text… ${Math.round(m.progress * 100)}%`; }
-        else if (m.status) msg.textContent = m.status + '…';
-      },
+    const { data } = await Tesseract.recognize(canvas, OCR_LANG[subject], {
+      logger: (m) => { if (m.status === 'recognizing text') { bar.style.width = Math.round(m.progress * 100) + '%'; msg.textContent = `Reading… ${Math.round(m.progress * 100)}%`; } },
     });
     const text = cleanOcr(data.text).replace(/\n{2,}/g, '\n').trim();
-    if (!THAI_RE.test(text)) { msg.textContent = 'No Thai text found. Try a clearer, closer photo in good light.'; return; }
     $('#srcText').value = ($('#srcText').value ? $('#srcText').value + '\n' : '') + text;
     bar.style.width = '100%';
-    msg.textContent = 'Done. Check the text, fix any mistakes, then tap “Split into words”.';
+    msg.textContent = 'Done. Fix any mistakes in the text, then tap “Split into words”.';
     $('#splitBtn').click();
-  } catch (e) {
-    console.error(e);
-    msg.textContent = 'Could not read the photo: ' + (e.message || e);
-  }
+  } catch (e) { console.error(e); msg.textContent = 'Could not read the photo: ' + (e.message || e); }
 }
 $('#photoCam').onchange = (e) => { runOcr(e.target.files[0]); e.target.value = ''; };
 $('#photoPick').onchange = (e) => { runOcr(e.target.files[0]); e.target.value = ''; };
+$('#aiGenBtn').onclick = async () => {
+  const subject = edSubject(), age = profile().age, topic = $('#aiTopic').value.trim();
+  const btn = $('#aiGenBtn'); btn.disabled = true; const label = btn.textContent; btn.textContent = '✨ Making…';
+  try {
+    const prompt = subject === 'math'
+      ? `Make 45 different arithmetic problems right for a ${age}-year-old child, getting slightly harder through the list. Write each like "7 + 5" with whole numbers and one of + − × ÷ (divisions must divide exactly). Return JSON {"items": [...]}.`
+      : `Make a list of 45 different ${LANG_NAME[subject]} words right for a ${age}-year-old child learning to read${topic ? `, about: ${topic}` : ''}, easier words first. Only single words${subject === 'en' ? '' : ' (common compound words are fine)'}. Return JSON {"items": [...]}.`;
+    const items = cleanAiItems((await gemini([{ text: prompt }])).items, subject);
+    addWords(items);
+    if (!$('#listName').value) $('#listName').value = `${SUBJECTS[subject]}${topic ? ': ' + topic : ''} (age ${age})`;
+    toast(`Added ${items.length}`);
+  } catch (e) { toast('Gemini error: ' + (e.message || e), 4000); }
+  btn.disabled = false; btn.textContent = label;
+};
 
 // ---------- SPEECH RECOGNITION ----------
 const recog = (() => {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const r = { supported: !!SR, active: false, onWords: null, paused: false };
+  const r = { supported: !!SR, active: false, onWords: null, paused: false, lang: 'th-TH' };
   let inst = null, restartTimer = null, pauseTimer = null;
   const dot = () => $('#micDot'), heard = () => $('#heard');
   function create() {
     inst = new SR();
-    inst.lang = 'th-TH';
-    inst.continuous = true;
-    inst.interimResults = true;
-    inst.maxAlternatives = 5;
-    inst.onstart = () => { dot().classList.add('on'); if (heard().textContent.startsWith('Mic')) heard().textContent = 'Listening… อ่านเลย!'; };
+    inst.lang = r.lang; inst.continuous = true; inst.interimResults = true; inst.maxAlternatives = 5;
+    inst.onstart = () => { dot().classList.add('on'); if (heard().textContent.startsWith('Mic')) heard().textContent = 'Listening… read it!'; };
     inst.onresult = (ev) => {
-      const alts = [];
-      let display = '';
+      const alts = []; let display = '';
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
-        const res = ev.results[i];
-        display += res[0].transcript;
+        const res = ev.results[i]; display += res[0].transcript;
         for (let j = 0; j < res.length; j++) alts.push(res[j].transcript);
       }
       if (display.trim()) heard().textContent = 'Heard: ' + display.trim();
-      if (r.onWords && !r.paused && r.onWords(alts)) {
-        try { inst.abort(); } catch {}
-      }
+      if (r.onWords && !r.paused && r.onWords(alts)) { try { inst.abort(); } catch {} }
     };
     inst.onerror = (e) => {
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-        r.active = false; heard().textContent = 'Mic blocked — allow microphone, or use the button';
+        r.active = false; heard().textContent = 'Mic blocked: allow the microphone, or use the button';
         toast('Microphone permission was blocked', 3000);
       }
     };
-    inst.onend = () => {
-      dot().classList.remove('on');
-      if (r.active) { clearTimeout(restartTimer); restartTimer = setTimeout(start1, r.paused ? 400 : 120); }
-    };
+    inst.onend = () => { dot().classList.remove('on'); if (r.active) { clearTimeout(restartTimer); restartTimer = setTimeout(start1, r.paused ? 400 : 120); } };
   }
   function start1() {
     if (!r.active) return;
     if (r.paused) { restartTimer = setTimeout(start1, 300); return; }
-    try { create(); inst.start(); } catch (e) { restartTimer = setTimeout(start1, 500); }
+    try { create(); inst.start(); } catch { restartTimer = setTimeout(start1, 500); }
   }
   r.start = () => { if (!SR) return; r.active = true; r.paused = false; heard().textContent = 'Mic starting…'; start1(); };
   r.stop = () => {
     r.active = false; clearTimeout(restartTimer); clearTimeout(pauseTimer);
     if (inst) { try { inst.abort(); } catch {} }
-    if (dot()) dot().classList.remove('on');
-    if (heard()) heard().textContent = 'Mic off';
+    dot().classList.remove('on'); heard().textContent = 'Mic off';
+  };
+  r.setLang = (code) => {
+    $('#micLang').textContent = code.slice(0, 2).toUpperCase();
+    if (r.lang === code) return;
+    r.lang = code;
+    if (r.active && inst) { try { inst.abort(); } catch {} }
   };
   r.pauseFor = (ms) => {
     r.paused = true; if (inst) { try { inst.abort(); } catch {} }
@@ -360,111 +600,53 @@ const recog = (() => {
   return r;
 })();
 
-// ---------- LEVELS ----------
-const LEVEL_SIZE = 15;
-const PASS_PCT = 80;
-const MAX_PTS = 100;
-const levelCount = (l) => Math.max(1, Math.ceil(l.words.length / LEVEL_SIZE));
-const levelSec = (i) => Math.max(1.8, +settings.speed - 0.1 * i);
-const prog = (listId) => progress[listId] || (progress[listId] = {});
-const isUnlocked = (listId, i) => i === 0 || (prog(listId)[i - 1]?.pct ?? 0) >= PASS_PCT;
-function levelWords(list, i) {
-  const words = list.words.slice(i * LEVEL_SIZE, (i + 1) * LEVEL_SIZE);
-  const pool = shuffle(list.words.filter((w) => !words.includes(w)));
-  const base = shuffle([...list.words]);
-  while (words.length < LEVEL_SIZE) {
-    const src = pool.length ? pool : base;
-    const w = src.length ? src.shift() : list.words[words.length % list.words.length];
-    if (!pool.length) base.push(w);
-    if (words[words.length - 1] !== w || list.words.length === 1) words.push(w);
-  }
-  if (settings.order !== 'shuffle') return words;
-  const hasAdjDup = (a) => a.some((w, k) => k && a[k - 1] === w);
-  for (let k = 0; k < 30; k++) { shuffle(words); if (!hasAdjDup(words)) break; }
-  return words;
-}
-function nextLevelIdx(list) {
-  const p = prog(list.id);
-  for (let i = 0; i < levelCount(list); i++) if ((p[i]?.pct ?? 0) < PASS_PCT) return i;
-  return 0;
-}
-function renderLevels() {
-  const list = getList(settings.listId);
-  $('#levelsTitle').textContent = 'Levels: ' + list.name;
-  const box = $('#levels'); box.innerHTML = '';
-  const p = prog(list.id);
-  for (let i = 0; i < levelCount(list); i++) {
-    const unlocked = isUnlocked(list.id, i);
-    const best = p[i];
-    const passed = best && best.pct >= PASS_PCT;
-    const b = document.createElement('button');
-    b.className = 'level-card' + (unlocked ? '' : ' locked') + (passed ? ' passed' : '');
-    const preview = list.words.slice(i * LEVEL_SIZE, i * LEVEL_SIZE + 4).join(' ');
-    b.innerHTML = `<span class="lv">Level ${i + 1} · ${levelSec(i).toFixed(1)}s</span>
-      <span class="lv-name">${unlocked ? (passed ? '✓ Passed' : 'Play') : '🔒 Locked'}</span>
-      <span class="lv-desc th-text">${escapeHtml(preview)}…</span>
-      ${best ? `<span class="lv-best">Best ${best.pct}% · ${best.score}</span>` : ''}`;
-    if (unlocked) b.onclick = () => startGame(i);
-    box.appendChild(b);
-  }
-}
-
 // ---------- GAME ----------
 const G = {
-  running: false, paused: false, raf: 0, last: 0,
-  W: 0, H: 0, cols: 3, colW: 100, rowH: 56, rows: 10,
+  running: false, paused: false, raf: 0, last: 0, W: 0, H: 0, cols: 3, colW: 100, rowH: 56, rows: 10,
   stacks: [], active: null, queue: [], list: null, levelIdx: 0, total: 0, resolved: 0,
-  score: 0, streak: 0, bestStreak: 0, read: 0, missed: [], times: [],
-  fallSec: 3, colorIdx: 0, rescueTile: null, spawnDelay: 0,
+  score: 0, streak: 0, bestStreak: 0, read: 0, missed: [], times: [], fallSec: 3, colorIdx: 0, rescueTile: null, spawnDelay: 0,
 };
-
 function layout() {
   const b = $('#board');
-  G.W = b.clientWidth; G.H = b.clientHeight;
-  G.colW = G.W / G.cols;
+  G.W = b.clientWidth; G.H = b.clientHeight; G.colW = G.W / G.cols;
   G.rowH = Math.max(44, Math.min(70, Math.round(G.H / 9)));
   G.rows = Math.max(4, Math.floor(G.H / G.rowH));
   b.style.setProperty('--colw', G.colW + 'px');
   $('#dangerLine').style.top = (G.H - G.rows * G.rowH) + G.rowH + 'px';
 }
-function measure() {
-  const b = $('#board');
-  G.cols = b.clientWidth >= 700 ? 5 : b.clientWidth >= 480 ? 4 : 3;
-  layout();
-}
-function stackTop(col) { return G.H - (G.stacks[col].length + 1) * G.rowH; }
+function measure() { const w = $('#board').clientWidth; G.cols = w >= 700 ? 5 : w >= 480 ? 4 : 3; layout(); }
+const stackTop = (col) => G.H - (G.stacks[col].length + 1) * G.rowH;
 function placeTile(t) {
   const x = t.col * G.colW + 3, y = t.y;
-  t.el.style.width = (G.colW - 6) + 'px';
-  t.el.style.height = (G.rowH - 4) + 'px';
-  t.el.style.transform = `translate(${x}px, ${y}px)`;
-  t.el.style.setProperty('--t', `translate(${x}px, ${y}px)`);
+  t.el.style.width = (G.colW - 6) + 'px'; t.el.style.height = (G.rowH - 4) + 'px';
+  t.el.style.transform = `translate(${x}px, ${y}px)`; t.el.style.setProperty('--t', `translate(${x}px, ${y}px)`);
 }
-function fitFont(el, word) {
-  const len = [...word.replace(/[\u0E31\u0E34-\u0E3A\u0E47-\u0E4E]/g, '')].length || 1;
-  const byW = (G.colW - 16) / (len * 0.62);
-  const byH = G.rowH * 0.5;
-  el.style.fontSize = Math.max(14, Math.min(byW, byH)) + 'px';
+function fitFont(el, text) {
+  let units = 0;
+  for (const ch of text) {
+    if (/[\u0E31\u0E34-\u0E3A\u0E47-\u0E4E]/.test(ch)) continue;
+    units += HAN_RE.test(ch) ? 1.05 : THAI_RE.test(ch) ? 0.62 : ch === ' ' ? 0.3 : 0.58;
+  }
+  el.style.fontSize = Math.max(13, Math.min((G.colW - 16) / Math.max(1, units), G.rowH * 0.5)) + 'px';
 }
-function makeTile(word, col) {
+function makeTile(item, col) {
   const el = document.createElement('div');
-  el.className = 'tile active';
-  el.textContent = word;
+  el.className = 'tile active ' + item.lang;
+  el.textContent = item.text;
   el.style.background = TILE_COLORS[G.colorIdx++ % TILE_COLORS.length];
-  fitFont(el, word);
+  fitFont(el, item.text);
   $('#board').appendChild(el);
-  return { word, col, y: -G.rowH, el, born: performance.now(), hinted: false, pausedMs: 0 };
+  return { item, col, y: -G.rowH, el, born: performance.now(), hinted: false, pausedMs: 0 };
 }
 function spawn() {
-  const word = G.queue.shift();
-  const heights = G.stacks.map((s) => s.length);
-  const minH = Math.min(...heights);
-  const candidates = heights.map((h, i) => [h, i]).filter(([h]) => h <= minH + 2).map(([, i]) => i);
-  const col = candidates[Math.random() * candidates.length | 0];
-  const t = makeTile(word, col);
+  const item = G.queue.shift();
+  const heights = G.stacks.map((s) => s.length), minH = Math.min(...heights);
+  const cands = heights.map((h, i) => [h, i]).filter(([h]) => h <= minH + 2).map(([, i]) => i);
+  const col = cands[Math.random() * cands.length | 0];
+  const t = makeTile(item, col);
   t.v = (stackTop(col) + G.rowH) / G.fallSec;
-  G.active = t;
-  placeTile(t);
+  G.active = t; placeTile(t);
+  recog.setLang(srLang(item.lang));
   hud();
 }
 function hud() {
@@ -477,21 +659,14 @@ function floatText(txt, x, y) {
   const f = document.createElement('div');
   f.className = 'float'; f.textContent = txt;
   f.style.left = Math.max(4, Math.min(G.W - 80, x)) + 'px'; f.style.top = Math.max(0, y) + 'px';
-  $('#board').appendChild(f);
-  setTimeout(() => f.remove(), 1000);
+  $('#board').appendChild(f); setTimeout(() => f.remove(), 1000);
 }
-function popTile(t) {
-  t.el.classList.remove('active', 'stacked', 'rescue');
-  t.el.classList.add('pop');
-  setTimeout(() => t.el.remove(), 450);
-}
+function popTile(t) { t.el.classList.remove('active', 'stacked', 'rescue'); t.el.classList.add('pop'); setTimeout(() => t.el.remove(), 450); }
 function beep(ok) {
   try {
     const ac = beep.ac || (beep.ac = new (window.AudioContext || window.webkitAudioContext)());
-    const o = ac.createOscillator(), g = ac.createGain();
-    o.connect(g); g.connect(ac.destination);
-    o.type = ok ? 'triangle' : 'sawtooth';
-    const now = ac.currentTime;
+    const o = ac.createOscillator(), g = ac.createGain(); o.connect(g); g.connect(ac.destination);
+    o.type = ok ? 'triangle' : 'sawtooth'; const now = ac.currentTime;
     if (ok) { o.frequency.setValueAtTime(660, now); o.frequency.setValueAtTime(990, now + 0.08); }
     else { o.frequency.setValueAtTime(200, now); o.frequency.linearRampToValueAtTime(110, now + 0.25); }
     g.gain.setValueAtTime(0.15, now); g.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
@@ -500,180 +675,135 @@ function beep(ok) {
 }
 function pointsFor(sec) {
   if (sec <= 1) return MAX_PTS;
-  const span = Math.max(0.5, G.fallSec - 1);
-  return Math.max(60, Math.round(MAX_PTS - 40 * (sec - 1) / span));
+  return Math.max(60, Math.round(MAX_PTS - 40 * (sec - 1) / Math.max(0.5, G.fallSec - 1)));
 }
 function resolveWord() {
-  G.active = null; G.resolved++; G.spawnDelay = 0.35;
-  hud();
+  G.active = null; G.resolved++; G.spawnDelay = 0.35; hud();
   if (G.resolved >= G.total) setTimeout(() => G.running && levelEnd(), 600);
 }
 function correctActive(byMic) {
   const t = G.active;
   if (!t || !G.running || G.paused) return;
   const sec = (performance.now() - t.born - t.pausedMs) / 1000;
-  let pts = pointsFor(sec);
-  if (t.hinted) pts = Math.round(pts / 2);
-  G.score += pts; G.streak++; G.read++;
-  G.bestStreak = Math.max(G.bestStreak, G.streak);
-  G.times.push(sec);
+  let pts = pointsFor(sec); if (t.hinted) pts = Math.round(pts / 2);
+  G.score += pts; G.streak++; G.read++; G.bestStreak = Math.max(G.bestStreak, G.streak); G.times.push(sec);
   floatText('+' + pts + (byMic ? ' 🎤' : ''), t.col * G.colW + 8, t.y);
-  popTile(t); beep(true);
-  resolveWord();
+  popTile(t); beep(true); resolveWord();
 }
 function land() {
   const t = G.active;
   t.y = stackTop(t.col);
   t.el.classList.remove('active'); t.el.classList.add('stacked');
   t.el.onclick = () => openRescue(t);
-  G.stacks[t.col].push(t);
-  placeTile(t);
-  if (!G.missed.includes(t.word)) G.missed.push(t.word);
-  G.streak = 0;
-  beep(false);
+  G.stacks[t.col].push(t); placeTile(t);
+  if (!G.missed.some((m) => m.text === t.item.text)) G.missed.push(t.item);
+  G.streak = 0; beep(false);
   if (G.stacks[t.col].length >= G.rows) { G.active = null; levelEnd(); return; }
   resolveWord();
 }
-function relayoutCol(col) {
-  G.stacks[col].forEach((t, i) => { t.y = G.H - (i + 1) * G.rowH; placeTile(t); });
-}
+function relayoutCol(col) { G.stacks[col].forEach((t, i) => { t.y = G.H - (i + 1) * G.rowH; placeTile(t); }); }
 function rescue(t) {
   const col = t.col, idx = G.stacks[col].indexOf(t);
   if (idx < 0) return;
   G.stacks[col].splice(idx, 1);
-  floatText('✓', col * G.colW + 8, t.y);
-  popTile(t); beep(true);
-  relayoutCol(col);
-  closeRescue();
+  floatText('✓', col * G.colW + 8, t.y); popTile(t); beep(true); relayoutCol(col); closeRescue();
 }
 function openRescue(t) {
   if (G.rescueTile) G.rescueTile.el.classList.remove('rescue');
   G.rescueTile = t; t.el.classList.add('rescue');
-  $('#rescueWord').textContent = t.word;
+  $('#rescueWord').textContent = t.item.text; $('#rescueWord').className = 'rescue-word ' + t.item.lang;
   $('#rescuePop').classList.remove('hidden');
 }
-function closeRescue() {
-  if (G.rescueTile) G.rescueTile.el.classList.remove('rescue');
-  G.rescueTile = null; $('#rescuePop').classList.add('hidden');
-}
-$('#rescueSay').onclick = () => G.rescueTile && say(G.rescueTile.word);
+function closeRescue() { if (G.rescueTile) G.rescueTile.el.classList.remove('rescue'); G.rescueTile = null; $('#rescuePop').classList.add('hidden'); }
+$('#rescueSay').onclick = () => G.rescueTile && say(sayText(G.rescueTile.item), G.rescueTile.item.lang);
 $('#rescueOk').onclick = () => G.rescueTile && rescue(G.rescueTile);
 $('#rescueClose').onclick = closeRescue;
 
 function onHeard(alts) {
   if (!G.running || G.paused) return false;
-  const heardNorm = alts.map(normalize);
-  if (G.active) {
-    const w = normalize(G.active.word);
-    if (heardNorm.some((h) => h.includes(w))) { correctActive(true); return true; }
-  }
+  if (G.active && matches(G.active.item, alts)) { correctActive(true); return true; }
   for (const col of G.stacks) for (const t of col) {
-    const w = normalize(t.word);
-    if (w.length >= 2 && heardNorm.some((h) => h.includes(w))) { rescue(t); return true; }
+    if (srLang(t.item.lang) !== recog.lang || t.item.lang === 'math') continue;
+    if (normalize(t.item.text).length >= 2 && matches(t.item, alts)) { rescue(t); return true; }
   }
   return false;
 }
-
 function frame(now) {
   if (!G.running) return;
-  const dt = Math.min(0.05, (now - G.last) / 1000);
-  G.last = now;
+  const dt = Math.min(0.05, (now - G.last) / 1000); G.last = now;
   if (!G.paused) {
-    if (!G.active) {
-      if (G.queue.length) { G.spawnDelay -= dt; if (G.spawnDelay <= 0) spawn(); }
-    } else {
-      const t = G.active;
-      t.y += t.v * dt;
-      if (t.y >= stackTop(t.col)) land(); else placeTile(t);
-    }
-  } else if (G.active) {
-    G.active.pausedMs += dt * 1000;
-  }
+    if (!G.active) { if (G.queue.length) { G.spawnDelay -= dt; if (G.spawnDelay <= 0) spawn(); } }
+    else { const t = G.active; t.y += t.v * dt; if (t.y >= stackTop(t.col)) land(); else placeTile(t); }
+  } else if (G.active) G.active.pausedMs += dt * 1000;
   G.raf = requestAnimationFrame(frame);
 }
-
-function clearBoard() {
-  $$('#board .tile, #board .float, #board .countdown').forEach((e) => e.remove());
-}
-function startGame(levelIdx) {
-  G.list = getList(settings.listId);
-  if (!G.list.words.length) { toast('This list has no words'); return; }
+function clearBoard() { $$('#board .tile, #board .float, #board .countdown').forEach((e) => e.remove()); }
+function startGame(listId, levelIdx) {
+  G.list = getList(listId) || currentList();
+  if (G.list.words && !G.list.words.length) { toast('This list is empty'); return; }
   if (levelIdx == null) levelIdx = nextLevelIdx(G.list);
   show('game');
   $('#overOverlay').classList.add('hidden'); $('#pauseOverlay').classList.add('hidden'); closeRescue();
-  clearBoard();
-  measure();
-  const words = levelWords(G.list, levelIdx);
+  clearBoard(); measure();
+  const items = levelItems(G.list, levelIdx);
   Object.assign(G, {
-    stacks: Array.from({ length: G.cols }, () => []), active: null, queue: words, levelIdx, total: words.length, resolved: 0,
-    score: 0, streak: 0, bestStreak: 0, read: 0, missed: [], times: [],
-    fallSec: levelSec(levelIdx), colorIdx: 0, paused: false, spawnDelay: 0,
+    stacks: Array.from({ length: G.cols }, () => []), active: null, queue: items, levelIdx, total: items.length, resolved: 0,
+    score: 0, streak: 0, bestStreak: 0, read: 0, missed: [], times: [], fallSec: levelSec(levelIdx), colorIdx: 0, paused: false, spawnDelay: 0,
   });
   hud();
-  const useMic = settings.mic === 'mic' && recog.supported;
   recog.onWords = onHeard;
-  if (useMic) recog.start(); else { recog.stop(); $('#heard').textContent = recog.supported ? 'Mic off (parent mode)' : 'No speech recognition in this browser'; }
+  recog.setLang(srLang(items[0].lang));
+  if (profile().mic === 'mic' && recog.supported) recog.start();
+  else { recog.stop(); $('#heard').textContent = recog.supported ? 'Mic off (parent mode)' : 'No speech recognition in this browser'; }
   if ('speechSynthesis' in window) speechSynthesis.speak(new SpeechSynthesisUtterance(''));
   countdown(3, () => { G.running = true; G.last = performance.now(); G.raf = requestAnimationFrame(frame); });
 }
 function countdown(n, done) {
-  const c = document.createElement('div');
-  c.className = 'countdown'; $('#board').appendChild(c);
-  const tick = () => {
-    if (n === 0) { c.remove(); done(); return; }
-    c.textContent = n--; setTimeout(tick, 650);
-  };
+  const c = document.createElement('div'); c.className = 'countdown'; $('#board').appendChild(c);
+  const tick = () => { if (n === 0) { c.remove(); done(); return; } c.textContent = n--; setTimeout(tick, 650); };
   tick();
 }
-function setPaused(p) {
-  if (!G.running) return;
-  G.paused = p;
-  $('#pauseOverlay').classList.toggle('hidden', !p);
-}
-function stopGame() {
-  G.running = false; cancelAnimationFrame(G.raf); recog.stop(); closeRescue();
-}
+function setPaused(p) { if (!G.running) return; G.paused = p; $('#pauseOverlay').classList.toggle('hidden', !p); }
+function stopGame() { G.running = false; cancelAnimationFrame(G.raf); recog.stop(); closeRescue(); }
 function levelEnd() {
   stopGame();
-  const max = G.total * MAX_PTS;
-  const pct = Math.round(G.score / max * 100);
-  const passed = pct >= PASS_PCT;
-  const p = prog(G.list.id);
-  const prev = p[G.levelIdx];
+  const max = G.total * MAX_PTS, pct = Math.round(G.score / max * 100), passed = pct >= PASS_PCT;
+  const p = prog(G.list.id), prev = p[G.levelIdx];
   const isBest = !prev || G.score > prev.score;
-  if (isBest) { p[G.levelIdx] = { pct, score: G.score }; save(BEST_KEY, progress); }
+  if (isBest) { p[G.levelIdx] = { pct, score: G.score }; save(K.progress, progress); }
+  const goal = +profile().goal, before = dayRec().passed;
+  const rec = recordDay(passed, G.read, G.score);
   const hasNext = G.levelIdx + 1 < levelCount(G.list);
   $('#finTitle').textContent = passed ? `Level ${G.levelIdx + 1} passed! 🎉` : `Level ${G.levelIdx + 1}: try again`;
-  $('#finPct').textContent = pct + '%';
-  $('#finPct').classList.toggle('fail', !passed);
-  $('#finBar').style.width = '0';
+  $('#finPct').textContent = pct + '%'; $('#finPct').classList.toggle('fail', !passed);
+  $('#finBar').style.width = '0'; $('#finBar').style.background = passed ? 'var(--ok)' : 'var(--danger)';
   requestAnimationFrame(() => requestAnimationFrame(() => { $('#finBar').style.width = Math.min(100, pct) + '%'; }));
-  $('#finBar').style.background = passed ? 'var(--ok)' : 'var(--danger)';
   $('#finScore').textContent = `${G.score} / ${max}`;
   $('#finRead').textContent = `${G.read} / ${G.total}`;
   $('#finStreak').textContent = G.bestStreak;
-  const avg = G.times.length ? (G.times.reduce((a, b) => a + b, 0) / G.times.length) : 0;
-  $('#finAvg').textContent = G.times.length ? avg.toFixed(1) + 's' : '–';
+  $('#finAvg').textContent = G.times.length ? (G.times.reduce((a, b) => a + b, 0) / G.times.length).toFixed(1) + 's' : '–';
   $('#finBest').textContent = (passed ? (hasNext ? `Level ${G.levelIdx + 2} unlocked. ` : 'All levels passed! ') : `Need ${PASS_PCT}% to pass. `)
     + (isBest && prev ? 'New best score!' : prev ? `Best: ${prev.pct}%` : '');
+  $('#finDaily').textContent = rec.passed >= goal
+    ? (before < goal ? `Daily goal done! 🔥 ${streak()} day streak` : `Today: ${rec.passed} levels passed 🔥 ${streak()}`)
+    : `Today: ${rec.passed}/${goal} levels passed`;
   $('#nextBtn').classList.toggle('hidden', !(passed && hasNext));
   const m = $('#finMissed'); m.innerHTML = '';
   $('#finMissedWrap').classList.toggle('hidden', !G.missed.length);
-  for (const w of G.missed) {
+  for (const it of G.missed) {
     const b = document.createElement('button');
-    b.className = 'chip'; b.textContent = '🔊 ' + w; b.onclick = () => say(w);
-    m.appendChild(b);
+    b.className = 'chip ' + it.lang; b.textContent = '🔊 ' + (it.lang === 'math' ? `${it.plain} = ${it.answer}` : it.text);
+    b.onclick = () => say(sayText(it), it.lang); m.appendChild(b);
   }
   $('#overOverlay').classList.remove('hidden');
 }
-
 $('#okBtn').onclick = () => correctActive(false);
-$('#hintBtn').onclick = () => { if (G.active && G.running && !G.paused) { G.active.hinted = true; say(G.active.word); } };
+$('#hintBtn').onclick = () => { if (G.active && G.running && !G.paused) { G.active.hinted = true; say(sayText(G.active.item), G.active.item.lang); } };
 $('#pauseBtn').onclick = () => setPaused(true);
 $('#resumeBtn').onclick = () => setPaused(false);
 $('#quitBtn').onclick = () => { stopGame(); show('home'); renderHome(); };
-$('#againBtn').onclick = () => startGame(G.levelIdx);
-$('#nextBtn').onclick = () => startGame(G.levelIdx + 1);
+$('#againBtn').onclick = () => startGame(G.list.id, G.levelIdx);
+$('#nextBtn').onclick = () => startGame(G.list.id, G.levelIdx + 1);
 $('#menuBtn').onclick = () => { show('home'); renderHome(); };
 document.addEventListener('keydown', (e) => {
   if (!$('#game').classList.contains('active') || !G.running) return;
@@ -683,18 +813,13 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener('visibilitychange', () => { if (document.hidden && G.running && !G.paused) setPaused(true); });
 window.addEventListener('resize', () => {
   if (!G.running) return;
-  const oldH = G.H;
-  layout();
-  G.stacks.forEach((s, c) => { s.forEach((t) => fitFont(t.el, t.word)); relayoutCol(c); });
-  if (G.active) {
-    const f = G.H / oldH;
-    G.active.y *= f; G.active.v *= f;
-    fitFont(G.active.el, G.active.word); placeTile(G.active);
-  }
+  const oldH = G.H; layout();
+  G.stacks.forEach((s, c) => { s.forEach((t) => fitFont(t.el, t.item.text)); relayoutCol(c); });
+  if (G.active) { const f = G.H / oldH; G.active.y *= f; G.active.v *= f; fitFont(G.active.el, G.active.item.text); placeTile(G.active); }
 });
 
 // ---------- init ----------
 checkHashImport();
 renderHome();
 window.addEventListener('hashchange', () => { checkHashImport(); renderHome(); });
-window.__twd = { G, splitThai, encodeList, decodeList, onHeard, correctActive, levelWords, getList };
+window.__twd = { G, splitText, encodeList, decodeList, onHeard, correctActive, levelItems, getList, numbersIn, parseExpr, matches, mathItem, streak, days, progress };

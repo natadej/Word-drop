@@ -133,3 +133,38 @@ label input[type=text]{width:100%}
 .lens-tip{margin-top:8px;font-size:15px;color:var(--muted)}
 .lens-tip summary{cursor:pointer;color:var(--accent);font-weight:600}
 .lens-tip ol{margin:6px 0 0;padding-left:22px}
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+.brand-sm{font-size:24px;font-weight:800;line-height:1}
+.brand-sm .th{display:block;font-family:var(--thai);color:var(--accent);font-size:15px}
+.profile-btn{background:var(--surface)}
+.today .k{font-size:13px;color:var(--muted)}
+.today-top{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.today-text{font-size:20px;font-weight:800}
+.streak{text-align:center;line-height:1}
+.streak span{font-size:34px;font-weight:800;color:var(--accent);display:block}
+.streak small{font-size:12px;color:var(--muted)}
+.goal-bar{height:10px;background:var(--bg);border-radius:5px;margin:10px 0;overflow:hidden}
+.goal-bar div{height:100%;background:var(--ok);width:0;transition:width .5s}
+.days-row{display:grid;grid-template-columns:repeat(14,1fr);gap:4px}
+.day{display:flex;flex-direction:column;align-items:center;font-size:11px;color:var(--muted);gap:2px}
+.day i{width:100%;max-width:22px;aspect-ratio:1;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-style:normal;font-size:11px;color:#06301a;font-weight:800}
+.day.played i{background:#c9a227}
+.day.passed i{background:var(--ok)}
+.day.today span{color:var(--text);font-weight:800}
+.tabs{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:16px}
+.tabs button{font:inherit;border:0;border-radius:12px;background:var(--surface);color:var(--text);padding:8px 2px;display:flex;flex-direction:column;align-items:center;cursor:pointer;line-height:1.1}
+.tabs button b{font-size:19px;font-family:'Baloo 2','Noto Sans Thai Looped','Noto Sans SC',sans-serif}
+.tabs button small{font-size:12px;color:var(--muted)}
+.tabs button.sel{background:var(--accent);color:var(--accent-fg)}
+.tabs button.sel small{color:var(--accent-fg)}
+.row.two{display:grid;grid-template-columns:2fr 1fr;gap:10px}
+.row.two label{margin:0}
+.dialog.left{text-align:left}
+.daily-msg{margin:0;font-weight:700;color:var(--ok)}
+.mic-lang{font-size:12px;font-weight:800;background:var(--surface2);border-radius:6px;padding:1px 6px;color:var(--accent)}
+.ai-row{border-top:1px dashed var(--surface2);padding-top:10px}
+.tile.zh,.chip.zh,.rescue-word.zh{font-family:'Noto Sans SC',var(--thai)}
+.tile.en,.tile.math{font-family:'Baloo 2',system-ui,sans-serif}
+.tile.math{letter-spacing:.5px}
+.badge{font-size:12px;font-weight:800;padding:1px 6px;border-radius:6px;background:var(--surface);color:var(--accent);margin-left:6px;vertical-align:middle}
+#profileList.hidden + .step{border-top:0;padding-top:0;margin-top:0}

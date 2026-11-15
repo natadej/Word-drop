@@ -1,14 +1,27 @@
-# Thai Word Drop (อ่านให้ทัน!)
+# Word Drop (อ่านให้ทัน!)
 
-A Tetris-style Thai reading game for kids. Thai words fall down the screen, and the child reads each one aloud before it lands on the stack.
+A falling-word reading game for kids. Words, Chinese characters or sums drop from the top like Tetris; the child reads each one aloud before it lands on the stack. The microphone checks the answer (Web Speech API), and a parent "✓ He read it!" button always works too.
 
-## Level 1: Word Drop
-- **Make a word list from a photo**: take a photo of Thai text (a book page or worksheet). On-device Thai OCR (Tesseract.js) reads it, and `Intl.Segmenter` splits it into words. You can delete, join and edit words before saving. You can also paste text.
-- **Gameplay**: one word falls at a time. The child reads it aloud. Thai speech recognition (`th-TH`, Web Speech API) clears the word when it hears it, and the parent can also tap **✓ He read it!**.
-- **Scoring**: faster reading earns more points (10–100 per word), with a streak multiplier up to ×3. Using **🔊 Hear it** halves the points for that word. Every 5 words read, the words fall faster.
-- **Missed words** land on the stack and come back again soon. Reading a stacked word, or tapping it, clears it for +5. The game ends when a column reaches the top, and the end screen lists the words to practise.
-- **Share a list**: 🔗 makes a link that adds the word list on another device.
+Static site: no build step, no server code. Serve the folder with any static server, e.g. `python3 -m http.server 8080`.
 
-## Run
-Static files only: `python3 -m http.server 8080`, then open http://localhost:8080.
-Speech recognition needs HTTPS (or localhost) and works best in Chrome, especially Chrome on Android.
+## Subjects
+- **Thai**, **English**, **Chinese (Simplified)**: built-in word banks for ages 4–6, 7–9 and 10–12 (`banks.js`), plus your own lists.
+- **Math**: generated sums that get harder level by level and by age. The child says the answer in English, Thai or Chinese (set per profile).
+- **Mix**: 15 items per level mixing all four; the mic switches language for each item.
+
+## Levels and scoring
+- 15 items per level; each item is worth up to 100 points (100 within 1 s, down to 60 just before it lands, 0 if missed, half with "Hear it").
+- 80% of the points passes the level and unlocks the next one.
+- Level 1 starts at 3 s per item (setting), each level 0.1 s faster, minimum 1.8 s.
+
+## Profiles and daily record
+- Each child has a profile with name and age; age picks the built-in words and math difficulty.
+- Daily goal (levels passed per day), day streak and a 14-day calendar.
+- Everything is stored in the browser's `localStorage`.
+
+## Making lists from a schoolbook photo
+- **Google Lens (free):** copy the text in Lens, then "📋 Paste text" in the app.
+- **Gemini (optional, most accurate):** add a Gemini API key in Settings (saved only in that browser). Photos are read and split into words or sums, and Gemini can add ~30 more items at the same difficulty as the page. "✨ Make words for age N" creates a list from a topic.
+- **Built-in reader:** Tesseract.js, works offline but makes mistakes.
+
+Lists can be shared with the 🔗 button (the list is encoded in the link).

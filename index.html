@@ -1,63 +1,99 @@
 <!doctype html>
-<html lang="th">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#1b1f3b">
-<title>Thai Word Drop</title>
+<title>Word Drop: Thai · English · 中文 · Math</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Crect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%235a45c9%22/%3E%3Ctext x=%2250%22 y=%2272%22 font-size=%2260%22 text-anchor=%22middle%22 fill=%22%23ffcc33%22%3E%E0%B8%81%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai+Looped:wght@500;700&family=Baloo+2:wght@600;800&display=swap" rel="stylesheet">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Crect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%235a45c9%22/%3E%3Ctext x=%2250%22 y=%2272%22 font-size=%2260%22 text-anchor=%22middle%22 fill=%22%23ffcc33%22%3E%E0%B8%81%3C/text%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai+Looped:wght@500;700&family=Noto+Sans+SC:wght@500;700&family=Baloo+2:wght@600;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
 <!-- HOME -->
 <section id="home" class="screen active">
-  <header class="brand">
-    <h1>Thai Word Drop <span class="th">อ่านให้ทัน!</span></h1>
-    <p class="sub">Read each Thai word out loud before it lands on the stack.</p>
+  <header class="topbar">
+    <div class="brand-sm">Word Drop <span class="th">อ่านให้ทัน!</span></div>
+    <button id="profileBtn" class="btn profile-btn">👤 <span id="profileName">Profile</span></button>
   </header>
 
-  <div class="panel">
+  <div id="todayCard" class="panel today">
+    <div class="today-top">
+      <div>
+        <div class="k">Today</div>
+        <div id="todayText" class="today-text"></div>
+      </div>
+      <div class="streak"><span id="streakNum">0</span><small>day streak 🔥</small></div>
+    </div>
+    <div class="goal-bar"><div id="goalBar"></div></div>
+    <div id="daysRow" class="days-row"></div>
+  </div>
+
+  <nav id="subjectTabs" class="tabs">
+    <button data-subject="th"><b>ไทย</b><small>Thai</small></button>
+    <button data-subject="en"><b>ABC</b><small>English</small></button>
+    <button data-subject="zh"><b>中文</b><small>Chinese</small></button>
+    <button data-subject="math"><b>1+2</b><small>Math</small></button>
+    <button data-subject="mix"><b>Mix</b><small>All</small></button>
+  </nav>
+
+  <div id="listsPanel" class="panel">
     <div class="panel-head">
       <h2>Word lists</h2>
-      <button id="newListBtn" class="btn primary">+ New list from photo or text</button>
+      <button id="newListBtn" class="btn primary">+ New list</button>
     </div>
     <ul id="listList" class="list-list"></ul>
   </div>
 
   <div class="panel">
     <h2 id="levelsTitle">Levels</h2>
-    <p class="hint">15 words per level. Get 80% of the points to pass and unlock the next level.</p>
+    <p class="hint">15 per level. Get 80% of the points to pass and unlock the next level.</p>
     <div id="levels" class="levels"></div>
   </div>
 
   <div class="panel settings">
-    <h2>Game settings</h2>
+    <h2 id="settingsTitle">Settings</h2>
     <label>Time to read each word (Level 1)
       <select id="setSpeed">
+        <option value="6">6 seconds</option>
         <option value="5">5 seconds</option>
         <option value="4">4 seconds</option>
-        <option value="3" selected>3 seconds</option>
+        <option value="3">3 seconds</option>
         <option value="2.5">2.5 seconds</option>
         <option value="2">2 seconds</option>
       </select>
     </label>
+    <label>Daily goal
+      <select id="setGoal">
+        <option value="1">Pass 1 level a day</option>
+        <option value="2">Pass 2 levels a day</option>
+        <option value="3">Pass 3 levels a day</option>
+        <option value="5">Pass 5 levels a day</option>
+      </select>
+    </label>
+    <label>Math answers spoken in
+      <select id="setMathLang">
+        <option value="en-US">English</option>
+        <option value="th-TH">Thai</option>
+        <option value="zh-CN">Chinese</option>
+      </select>
+    </label>
     <label>Word order
       <select id="setOrder">
-        <option value="shuffle" selected>Shuffle</option>
+        <option value="shuffle">Shuffle</option>
         <option value="inorder">In order</option>
       </select>
     </label>
     <label>Check reading with
       <select id="setMic">
-        <option value="mic" selected>Microphone + parent button</option>
+        <option value="mic">Microphone + parent button</option>
         <option value="parent">Parent button only</option>
       </select>
     </label>
-    <label class="full-col">Gemini API key <span class="muted">(optional: very accurate photo reading)</span>
+    <label class="full-col">Gemini API key <span class="muted">(optional: accurate photo reading and AI word lists)</span>
       <input id="setGemini" type="password" autocomplete="off" placeholder="Paste key from aistudio.google.com">
     </label>
     <p id="micSupport" class="hint"></p>
@@ -71,12 +107,22 @@
     <h2 id="editorTitle">New word list</h2>
   </header>
   <div class="panel">
-    <label class="full">List name
-      <input id="listName" type="text" placeholder="e.g. Book 1, page 12">
-    </label>
+    <div class="row two">
+      <label>List name
+        <input id="listName" type="text" placeholder="e.g. Book 1, page 12">
+      </label>
+      <label>Subject
+        <select id="listSubject">
+          <option value="th">Thai</option>
+          <option value="en">English</option>
+          <option value="zh">Chinese (Simplified)</option>
+          <option value="math">Math</option>
+        </select>
+      </label>
+    </div>
 
     <div class="step">
-      <h3>1. Take a photo of Thai text <span class="muted">(or paste text below)</span></h3>
+      <h3>1. Photo of the schoolbook <span class="muted">(or paste text below)</span></h3>
       <div class="row">
         <label class="btn primary file-btn">📷 Take photo
           <input id="photoCam" type="file" accept="image/*" capture="environment" hidden>
@@ -86,6 +132,7 @@
         </label>
         <button id="pasteBtn" class="btn">📋 Paste text</button>
       </div>
+      <label class="check"><input id="moreLike" type="checkbox" checked> Also add ~30 more at the same level as the photo (Gemini)</label>
       <p id="readerInfo" class="hint"></p>
       <details class="lens-tip">
         <summary>Most accurate free way: Google Lens</summary>
@@ -97,14 +144,18 @@
       </details>
       <div id="ocrStatus" class="ocr-status hidden">
         <div class="progress"><div id="ocrBar"></div></div>
-        <span id="ocrMsg">Reading Thai text…</span>
+        <span id="ocrMsg">Reading text…</span>
       </div>
       <img id="photoPreview" class="photo-preview hidden" alt="">
+      <div id="aiGenRow" class="row ai-row">
+        <input id="aiTopic" type="text" placeholder="Topic (optional), e.g. animals">
+        <button id="aiGenBtn" class="btn">✨ Make words for his age</button>
+      </div>
     </div>
 
     <div class="step">
       <h3>2. Check the text</h3>
-      <textarea id="srcText" rows="4" placeholder="วางข้อความภาษาไทยที่นี่ / Paste Thai text here"></textarea>
+      <textarea id="srcText" rows="4" placeholder="Paste text here / วางข้อความที่นี่ / 粘贴文字"></textarea>
       <div class="row">
         <button id="splitBtn" class="btn primary">✂️ Split into words</button>
         <label class="check"><input id="dedupe" type="checkbox" checked> Remove duplicates</label>
@@ -113,7 +164,7 @@
 
     <div class="step">
       <h3>3. Words <span id="wordCount" class="muted"></span></h3>
-      <p class="hint">Tap a word to select it. Selected: <b>✕</b> deletes it, <b>⇥ Join</b> joins it with the next word, <b>✎</b> edits it.</p>
+      <p class="hint">Tap a word to select it, then delete, join with the next word, edit, or hear it.</p>
       <div id="chips" class="chips"></div>
       <div class="row chip-actions">
         <button id="chipDel" class="btn small" disabled>✕ Delete</button>
@@ -122,7 +173,7 @@
         <button id="chipSay" class="btn small" disabled>🔊 Hear</button>
       </div>
       <div class="row">
-        <input id="addWord" type="text" placeholder="Add a word">
+        <input id="addWord" type="text" placeholder="Add a word (or 7 + 5 for math)">
         <button id="addWordBtn" class="btn">Add</button>
       </div>
     </div>
@@ -150,6 +201,7 @@
     <div class="controls">
       <div id="micBox" class="mic-box">
         <span id="micDot" class="mic-dot"></span>
+        <span id="micLang" class="mic-lang"></span>
         <span id="heard" class="heard">Mic off</span>
       </div>
       <button id="hintBtn" class="btn ctrl"><span>🔊 Hear it</span><small>½ points</small></button>
@@ -181,13 +233,14 @@
       <div class="pass-bar"><div id="finBar"></div><span class="mark"></span></div>
       <div class="final">
         <div><span class="k">Score</span><span id="finScore" class="v"></span></div>
-        <div><span class="k">Words read</span><span id="finRead" class="v"></span></div>
+        <div><span class="k">Read</span><span id="finRead" class="v"></span></div>
         <div><span class="k">Avg. time</span><span id="finAvg" class="v"></span></div>
         <div><span class="k">Best streak</span><span id="finStreak" class="v"></span></div>
       </div>
       <p id="finBest" class="best"></p>
+      <p id="finDaily" class="daily-msg"></p>
       <div id="finMissedWrap">
-        <h3>Words to practise</h3>
+        <h3>To practise</h3>
         <div id="finMissed" class="chips"></div>
       </div>
       <div class="row center">
@@ -199,9 +252,33 @@
   </div>
 </section>
 
+<!-- PROFILES -->
+<div id="profileOverlay" class="overlay hidden">
+  <div class="dialog wide left">
+    <h2>Who's playing?</h2>
+    <ul id="profileList" class="list-list"></ul>
+    <div class="step">
+      <h3 id="pfTitle">New profile</h3>
+      <div class="row two">
+        <label>Name <input id="pfName" type="text" placeholder="Luffy"></label>
+        <label>Age
+          <select id="pfAge"></select>
+        </label>
+      </div>
+      <p class="hint">Age sets the built-in words and how hard the math is.</p>
+      <div class="row end">
+        <button id="pfDelete" class="btn danger hidden">Delete</button>
+        <button id="pfCancel" class="btn ghost">Close</button>
+        <button id="pfSave" class="btn primary">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="toast hidden"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" defer></script>
+<script src="banks.js" defer></script>
 <script src="app.js" defer></script>
 </body>
 </html>
