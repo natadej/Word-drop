@@ -197,6 +197,7 @@ function splitText(text, subject, dedupe) {
   else {
     const re = subject === 'zh' ? HAN_RE : THAI_RE;
     text = cleanOcr(text);
+    if (subject === 'th') text = text.replace(/[\u0E50-\u0E59]+/g, ' ');
     if (window.Intl && Intl.Segmenter) {
       for (const s of new Intl.Segmenter(subject, { granularity: 'word' }).segment(text)) if (s.isWordLike !== false && re.test(s.segment)) words.push(s.segment.trim());
     } else words = text.split(/\s+/).filter((w) => re.test(w));
@@ -478,7 +479,9 @@ function openEditor(list) {
 }
 function updateEditorInfo() {
   const g = !!settings.gemini;
+  const ot = OpenThai.langs.includes(edSubject());
   $('#readerInfo').textContent = g ? 'Photos are read by Gemini AI (accurate).'
+    : ot ? 'Photos are read on this device by the free OpenThai reader (good for printed Thai and English). Add a Gemini key in Settings for grade levels and extra words.'
     : 'Photos are read by the free built-in reader, which makes mistakes. For better accuracy use Google Lens (below), or add a Gemini key in Settings.';
   $('#moreLike').parentElement.classList.toggle('hidden', !g);
   $('#aiGenRow').classList.toggle('hidden', !g);
@@ -613,23 +616,40 @@ async function runOcr(file) {
       const ref = addRef(subject, canvas, items, extra, out.grade);
       bar.style.width = '100%';
       msg.textContent = `Done: ${items.length} from the photo${extra.length ? ` + ${extra.length} more at the same level` : ''} (${gradeName(ref.grade)} level). Saved as a book photo. Check them, then save.`;
-    } catch (e) { console.error(e); msg.textContent = 'Gemini could not read the photo: ' + (e.message || e) + '. Check the key in Settings.'; }
+    } catch (e) {
+      console.error(e);
+      const why = 'Gemini could not read the photo: ' + String(e.message || e).replace(/\.+$/, '') + '. ';
+      if (OpenThai.langs.includes(subject)) return readFree(file, subject, why + 'Using the built-in reader instead. ');
+      msg.textContent = why + 'Check the key in Settings.';
+    }
     return;
   }
-  if (!window.Tesseract) { toast('Text reader still loading, try again in a moment'); return; }
-  msg.textContent = 'Loading reader (first time takes a little while)…';
+  await readFree(file, subject);
+}
+async function readFree(file, subject, why = '') {
+  const bar = $('#ocrBar'), msg = $('#ocrMsg');
+  const thaiReader = OpenThai.langs.includes(subject);
+  if (!thaiReader && !window.Tesseract) { toast('Text reader still loading, try again in a moment'); return; }
+  msg.textContent = why + 'Loading reader (first time takes a little while)…';
   try {
-    const canvas = await prepImage(file);
-    const { data } = await Tesseract.recognize(canvas, OCR_LANG[subject], {
-      logger: (m) => { if (m.status === 'recognizing text') { bar.style.width = Math.round(m.progress * 100) + '%'; msg.textContent = `Reading… ${Math.round(m.progress * 100)}%`; } },
-    });
-    const text = cleanOcr(data.text).replace(/\n{2,}/g, '\n').trim();
+    const canvas = await prepImage(file, !thaiReader);
+    let text;
+    if (thaiReader) {
+      text = (await OpenThai.read(canvas, (f, m) => { bar.style.width = Math.round(f * 100) + '%'; msg.textContent = why + m; })).text;
+    } else {
+      const { data } = await Tesseract.recognize(canvas, OCR_LANG[subject], {
+        logger: (m) => { if (m.status === 'recognizing text') { bar.style.width = Math.round(m.progress * 100) + '%'; msg.textContent = `${why}Reading… ${Math.round(m.progress * 100)}%`; } },
+      });
+      text = data.text;
+    }
+    text = cleanOcr(text).replace(/\n{2,}/g, '\n').trim();
+    if (!splitText(text, subject).length) { msg.textContent = `${why}No ${SUBJECTS[subject]} found. Check the subject, or try a clearer photo.`; return; }
     $('#srcText').value = ($('#srcText').value ? $('#srcText').value + '\n' : '') + text;
     bar.style.width = '100%';
     $('#splitBtn').click();
     const ref = addRef(subject, canvas, splitText(text, subject, true), [], null);
-    msg.textContent = `Done${ref ? ` (${gradeName(ref.grade)} level, saved as a book photo)` : ''}. Fix any mistakes, then save.`;
-  } catch (e) { console.error(e); msg.textContent = 'Could not read the photo: ' + (e.message || e); }
+    msg.textContent = `${why}Done${ref ? ` (${gradeName(ref.grade)} level, saved as a book photo)` : ''}. Fix any mistakes, then save.`;
+  } catch (e) { console.error(e); msg.textContent = why + 'Could not read the photo: ' + (e.message || e); }
 }
 $('#photoCam').onchange = (e) => { runOcr(e.target.files[0]); e.target.value = ''; };
 $('#photoPick').onchange = (e) => { runOcr(e.target.files[0]); e.target.value = ''; };

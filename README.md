@@ -22,10 +22,11 @@ Static site: no build step, no server code. Serve the folder with any static ser
 ## Making lists from a schoolbook photo
 - **Google Lens (free):** copy the text in Lens, then "📋 Paste text" in the app.
 - **Gemini (optional, most accurate):** add a Gemini API key in Settings (saved only in that browser). Photos are read and split into words or sums, and Gemini can add ~30 more items at the same difficulty as the page. "✨ Make words for age N" creates a list from a topic.
-- **Built-in reader:** Tesseract.js, works offline but makes mistakes.
+- **OpenThai reader (free, Thai and English):** [OpenThai 2.0 OCR Text](https://huggingface.co/iapp/OpenThai2.0-OCR-Text) by iApp (Apache-2.0, see `openthai/NOTICE`), run on the device with ONNX Runtime Web (`openthai.js`, a JavaScript port of the model's line engine). The photo never leaves the device; the ~4 MB model is downloaded once and kept in the browser cache. Also used when Gemini fails.
+- **Built-in reader for 中文 and math:** Tesseract.js, makes mistakes.
 
 ## Book photos set the difficulty
-Every photo you read is kept per child and subject as a reference: a small thumbnail, the words or sums found on it, and a school grade level (estimated by Gemini, or by word length/number size with the built-in reader).
+Every photo you read is kept per child and subject as a reference: a small thumbnail, the words or sums found on it, and a school grade level (estimated by Gemini, or by word length/number size with the free readers).
 - **📚 From <name>'s books**: one list per subject that grows with every photo.
 - Once a subject has photos, its difficulty comes from them instead of age (weighted average of the last 6, newest counting most). This picks the built-in word bank, math difficulty, Mix content and what Gemini generates.
 - Photos are shown under the word lists; tap one to view or delete it.
