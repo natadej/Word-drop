@@ -20,16 +20,6 @@
     <p class="sub">Read each Thai word out loud before it lands on the stack.</p>
   </header>
 
-  <div class="levels">
-    <button class="level-card" data-level="1" id="level1Card">
-      <span class="lv">Level 1</span>
-      <span class="lv-name">Word Drop</span>
-      <span class="lv-desc">Words fall. Read them before they land.</span>
-    </button>
-    <div class="level-card locked"><span class="lv">Level 2</span><span class="lv-name">Coming soon</span></div>
-    <div class="level-card locked"><span class="lv">Level 3</span><span class="lv-name">Coming soon</span></div>
-  </div>
-
   <div class="panel">
     <div class="panel-head">
       <h2>Word lists</h2>
@@ -38,14 +28,21 @@
     <ul id="listList" class="list-list"></ul>
   </div>
 
+  <div class="panel">
+    <h2 id="levelsTitle">Levels</h2>
+    <p class="hint">15 words per level. Get 80% of the points to pass and unlock the next level.</p>
+    <div id="levels" class="levels"></div>
+  </div>
+
   <div class="panel settings">
     <h2>Game settings</h2>
-    <label>Speed
+    <label>Time to read each word (Level 1)
       <select id="setSpeed">
-        <option value="14">Very slow</option>
-        <option value="10" selected>Slow</option>
-        <option value="7">Normal</option>
-        <option value="5">Fast</option>
+        <option value="5">5 seconds</option>
+        <option value="4">4 seconds</option>
+        <option value="3" selected>3 seconds</option>
+        <option value="2.5">2.5 seconds</option>
+        <option value="2">2 seconds</option>
       </select>
     </label>
     <label>Word order
@@ -128,10 +125,10 @@
 <section id="game" class="screen">
   <div class="hud">
     <button id="pauseBtn" class="btn ghost icon" title="Pause">⏸</button>
+    <div class="stat"><span class="k">Level</span><span id="hudLevel" class="v">1</span></div>
+    <div class="stat"><span class="k">Word</span><span id="hudWord" class="v">0/15</span></div>
     <div class="stat"><span class="k">Score</span><span id="hudScore" class="v">0</span></div>
-    <div class="stat"><span class="k">Streak</span><span id="hudStreak" class="v">0</span></div>
-    <div class="stat"><span class="k">Speed</span><span id="hudSpeed" class="v">1</span></div>
-    <div class="stat"><span class="k">Read</span><span id="hudRead" class="v">0</span></div>
+    <div class="stat"><span class="k">Pass at</span><span id="hudPass" class="v">1200</span></div>
   </div>
   <div class="game-body">
     <div id="board" class="board">
@@ -166,12 +163,14 @@
 
   <div id="overOverlay" class="overlay hidden">
     <div class="dialog wide">
-      <h2>Game over</h2>
+      <h2 id="finTitle">Level complete</h2>
+      <div id="finPct" class="pct"></div>
+      <div class="pass-bar"><div id="finBar"></div><span class="mark"></span></div>
       <div class="final">
-        <div><span class="k">Score</span><span id="finScore" class="v big"></span></div>
+        <div><span class="k">Score</span><span id="finScore" class="v"></span></div>
         <div><span class="k">Words read</span><span id="finRead" class="v"></span></div>
-        <div><span class="k">Best streak</span><span id="finStreak" class="v"></span></div>
         <div><span class="k">Avg. time</span><span id="finAvg" class="v"></span></div>
+        <div><span class="k">Best streak</span><span id="finStreak" class="v"></span></div>
       </div>
       <p id="finBest" class="best"></p>
       <div id="finMissedWrap">
@@ -179,7 +178,8 @@
         <div id="finMissed" class="chips"></div>
       </div>
       <div class="row center">
-        <button id="againBtn" class="btn primary big">Play again</button>
+        <button id="nextBtn" class="btn primary big">Next level ▶</button>
+        <button id="againBtn" class="btn big">↻ Try again</button>
         <button id="menuBtn" class="btn">Menu</button>
       </div>
     </div>

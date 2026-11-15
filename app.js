@@ -4,11 +4,11 @@ const $$ = (s) => [...document.querySelectorAll(s)];
 
 const STORE_KEY = 'twd.lists.v1';
 const SETTINGS_KEY = 'twd.settings.v1';
-const BEST_KEY = 'twd.best.v1';
+const BEST_KEY = 'twd.progress.v1';
 
 const STARTER = {
   id: 'starter', builtin: true, name: 'Starter words (คำง่าย)',
-  words: ['แม่','พ่อ','ไก่','ปลา','หมา','แมว','บ้าน','น้ำ','ข้าว','ไข่','ตา','มือ','ขา','รถ','ไฟ','ดี','กิน','นอน','เล่น','ใหญ่','เล็ก','ร้อน','เย็น','หนังสือ','โรงเรียน','ครู','เพื่อน','ช้าง','ม้า','นก'],
+  words: ['แม่','พ่อ','ไก่','ปลา','หมา','แมว','บ้าน','น้ำ','ข้าว','ไข่','ตา','มือ','ขา','รถ','ไฟ','ดี','กิน','นอน','เล่น','ใหญ่','เล็ก','ร้อน','เย็น','หนังสือ','โรงเรียน','ครู','เพื่อน','ช้าง','ม้า','นก','ต้นไม้','ดอกไม้','ทะเล','ภูเขา','ฝน','แดด','ลม','กล้วย','มะม่วง','ส้ม','นม','ขนม','วิ่ง','เดิน','อ่าน'],
 };
 
 const THAI_RE = /[\u0E00-\u0E7F]/;
@@ -18,8 +18,9 @@ const TILE_COLORS = ['#ff6b6b','#ffa94d','#ffd43b','#69db7c','#38d9a9','#4dabf7'
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
 const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 let lists = load(STORE_KEY, []);
-let settings = Object.assign({ speed: '10', order: 'shuffle', mic: 'mic', listId: 'starter' }, load(SETTINGS_KEY, {}));
-let bests = load(BEST_KEY, {});
+let settings = Object.assign({ speed: '3', order: 'shuffle', mic: 'mic', listId: 'starter' }, load(SETTINGS_KEY, {}));
+if (+settings.speed > 5) settings.speed = '3';
+let progress = load(BEST_KEY, {});
 const allLists = () => [STARTER, ...lists];
 const getList = (id) => allLists().find((l) => l.id === id) || STARTER;
 
@@ -107,9 +108,10 @@ function renderHome() {
   for (const l of allLists()) {
     const li = document.createElement('li');
     li.className = 'list-item' + (l.id === settings.listId ? ' sel' : '');
-    const b = bests[l.id];
+    const p = prog(l.id), n = levelCount(l);
+    const passedN = Object.values(p).filter((x) => x.pct >= PASS_PCT).length;
     li.innerHTML = `<div class="name"><b>${escapeHtml(l.name)}</b><small>${l.words.length} words · ${escapeHtml(l.words.slice(0, 8).join(' '))}</small></div>
-      ${b ? `<span class="best">★ ${b}</span>` : ''}
+      <span class="best">${passedN}/${n} ✓</span>
       <button class="btn small" data-act="play">▶ Play</button>
       ${l.builtin ? '' : '<button class="btn small ghost" data-act="edit">✎</button><button class="btn small ghost" data-act="share" title="Share link">🔗</button>'}`;
     li.querySelector('.name').onclick = () => { settings.listId = l.id; save(SETTINGS_KEY, settings); renderHome(); };
@@ -118,6 +120,7 @@ function renderHome() {
     const sh = li.querySelector('[data-act=share]'); if (sh) sh.onclick = () => shareList(l);
     ul.appendChild(li);
   }
+  renderLevels();
   $('#setSpeed').value = settings.speed;
   $('#setOrder').value = settings.order;
   $('#setMic').value = settings.mic;
@@ -133,9 +136,8 @@ async function shareList(l) {
   } catch { prompt('Copy this link', url); }
 }
 ['setSpeed', 'setOrder', 'setMic'].forEach((id) => {
-  $('#' + id).onchange = (e) => { settings[id.slice(3).toLowerCase()] = e.target.value; save(SETTINGS_KEY, settings); };
+  $('#' + id).onchange = (e) => { settings[id.slice(3).toLowerCase()] = e.target.value; save(SETTINGS_KEY, settings); renderLevels(); };
 });
-$('#level1Card').onclick = () => startGame();
 $('#newListBtn').onclick = () => openEditor(null);
 $$('[data-go]').forEach((b) => (b.onclick = () => { show(b.dataset.go); renderHome(); }));
 
@@ -297,24 +299,77 @@ const recog = (() => {
   return r;
 })();
 
+// ---------- LEVELS ----------
+const LEVEL_SIZE = 15;
+const PASS_PCT = 80;
+const MAX_PTS = 100;
+const levelCount = (l) => Math.max(1, Math.ceil(l.words.length / LEVEL_SIZE));
+const levelSec = (i) => Math.max(1.8, +settings.speed - 0.1 * i);
+const prog = (listId) => progress[listId] || (progress[listId] = {});
+const isUnlocked = (listId, i) => i === 0 || (prog(listId)[i - 1]?.pct ?? 0) >= PASS_PCT;
+function levelWords(list, i) {
+  const words = list.words.slice(i * LEVEL_SIZE, (i + 1) * LEVEL_SIZE);
+  const pool = shuffle(list.words.filter((w) => !words.includes(w)));
+  const base = shuffle([...list.words]);
+  while (words.length < LEVEL_SIZE) {
+    const src = pool.length ? pool : base;
+    const w = src.length ? src.shift() : list.words[words.length % list.words.length];
+    if (!pool.length) base.push(w);
+    if (words[words.length - 1] !== w || list.words.length === 1) words.push(w);
+  }
+  if (settings.order !== 'shuffle') return words;
+  const hasAdjDup = (a) => a.some((w, k) => k && a[k - 1] === w);
+  for (let k = 0; k < 30; k++) { shuffle(words); if (!hasAdjDup(words)) break; }
+  return words;
+}
+function nextLevelIdx(list) {
+  const p = prog(list.id);
+  for (let i = 0; i < levelCount(list); i++) if ((p[i]?.pct ?? 0) < PASS_PCT) return i;
+  return 0;
+}
+function renderLevels() {
+  const list = getList(settings.listId);
+  $('#levelsTitle').textContent = 'Levels: ' + list.name;
+  const box = $('#levels'); box.innerHTML = '';
+  const p = prog(list.id);
+  for (let i = 0; i < levelCount(list); i++) {
+    const unlocked = isUnlocked(list.id, i);
+    const best = p[i];
+    const passed = best && best.pct >= PASS_PCT;
+    const b = document.createElement('button');
+    b.className = 'level-card' + (unlocked ? '' : ' locked') + (passed ? ' passed' : '');
+    const preview = list.words.slice(i * LEVEL_SIZE, i * LEVEL_SIZE + 4).join(' ');
+    b.innerHTML = `<span class="lv">Level ${i + 1} · ${levelSec(i).toFixed(1)}s</span>
+      <span class="lv-name">${unlocked ? (passed ? '✓ Passed' : 'Play') : '🔒 Locked'}</span>
+      <span class="lv-desc th-text">${escapeHtml(preview)}…</span>
+      ${best ? `<span class="lv-best">Best ${best.pct}% · ${best.score}</span>` : ''}`;
+    if (unlocked) b.onclick = () => startGame(i);
+    box.appendChild(b);
+  }
+}
+
 // ---------- GAME ----------
 const G = {
   running: false, paused: false, raf: 0, last: 0,
-  board: null, W: 0, H: 0, cols: 3, colW: 100, rowH: 56, rows: 10,
-  stacks: [], active: null, queue: [], list: null,
+  W: 0, H: 0, cols: 3, colW: 100, rowH: 56, rows: 10,
+  stacks: [], active: null, queue: [], list: null, levelIdx: 0, total: 0, resolved: 0,
   score: 0, streak: 0, bestStreak: 0, read: 0, missed: [], times: [],
-  baseFall: 10, fallSec: 10, speedLvl: 1, colorIdx: 0, rescueTile: null, spawnDelay: 0,
+  fallSec: 3, colorIdx: 0, rescueTile: null, spawnDelay: 0,
 };
 
-function measure() {
+function layout() {
   const b = $('#board');
   G.W = b.clientWidth; G.H = b.clientHeight;
-  G.cols = G.W >= 700 ? 5 : G.W >= 480 ? 4 : 3;
   G.colW = G.W / G.cols;
   G.rowH = Math.max(44, Math.min(70, Math.round(G.H / 9)));
   G.rows = Math.max(4, Math.floor(G.H / G.rowH));
   b.style.setProperty('--colw', G.colW + 'px');
   $('#dangerLine').style.top = (G.H - G.rows * G.rowH) + G.rowH + 'px';
+}
+function measure() {
+  const b = $('#board');
+  G.cols = b.clientWidth >= 700 ? 5 : b.clientWidth >= 480 ? 4 : 3;
+  layout();
 }
 function stackTop(col) { return G.H - (G.stacks[col].length + 1) * G.rowH; }
 function placeTile(t) {
@@ -339,27 +394,23 @@ function makeTile(word, col) {
   $('#board').appendChild(el);
   return { word, col, y: -G.rowH, el, born: performance.now(), hinted: false, pausedMs: 0 };
 }
-function nextWord() {
-  if (!G.queue.length) {
-    const ws = [...G.list.words];
-    G.queue = settings.order === 'shuffle' ? shuffle(ws) : ws;
-  }
-  return G.queue.shift();
-}
 function spawn() {
-  const word = nextWord();
+  const word = G.queue.shift();
   const heights = G.stacks.map((s) => s.length);
   const minH = Math.min(...heights);
   const candidates = heights.map((h, i) => [h, i]).filter(([h]) => h <= minH + 2).map(([, i]) => i);
   const col = candidates[Math.random() * candidates.length | 0];
-  G.active = makeTile(word, col);
-  placeTile(G.active);
+  const t = makeTile(word, col);
+  t.v = (stackTop(col) + G.rowH) / G.fallSec;
+  G.active = t;
+  placeTile(t);
+  hud();
 }
 function hud() {
+  $('#hudLevel').textContent = G.levelIdx + 1;
+  $('#hudWord').textContent = `${Math.min(G.total, G.resolved + (G.active ? 1 : 0))}/${G.total}`;
   $('#hudScore').textContent = G.score;
-  $('#hudStreak').textContent = G.streak;
-  $('#hudSpeed').textContent = G.speedLvl;
-  $('#hudRead').textContent = G.read;
+  $('#hudPass').textContent = Math.ceil(G.total * MAX_PTS * PASS_PCT / 100);
 }
 function floatText(txt, x, y) {
   const f = document.createElement('div');
@@ -386,27 +437,28 @@ function beep(ok) {
     o.start(now); o.stop(now + 0.3);
   } catch {}
 }
-
+function pointsFor(sec) {
+  if (sec <= 1) return MAX_PTS;
+  const span = Math.max(0.5, G.fallSec - 1);
+  return Math.max(60, Math.round(MAX_PTS - 40 * (sec - 1) / span));
+}
+function resolveWord() {
+  G.active = null; G.resolved++; G.spawnDelay = 0.35;
+  hud();
+  if (G.resolved >= G.total) setTimeout(() => G.running && levelEnd(), 600);
+}
 function correctActive(byMic) {
   const t = G.active;
   if (!t || !G.running || G.paused) return;
-  const landY = stackTop(t.col);
-  const frac = Math.max(0, Math.min(1, 1 - (t.y + G.rowH) / (landY + G.rowH)));
-  const mult = 1 + Math.min(4, Math.floor(G.streak / 3)) * 0.5;
-  let pts = Math.round((10 + 90 * frac) * mult);
+  const sec = (performance.now() - t.born - t.pausedMs) / 1000;
+  let pts = pointsFor(sec);
   if (t.hinted) pts = Math.round(pts / 2);
   G.score += pts; G.streak++; G.read++;
   G.bestStreak = Math.max(G.bestStreak, G.streak);
-  G.times.push((performance.now() - t.born - t.pausedMs) / 1000);
+  G.times.push(sec);
   floatText('+' + pts + (byMic ? ' 🎤' : ''), t.col * G.colW + 8, t.y);
   popTile(t); beep(true);
-  G.active = null; G.spawnDelay = 0.35;
-  if (G.read % 5 === 0) {
-    G.speedLvl++;
-    G.fallSec = Math.max(2.8, G.baseFall * Math.pow(0.9, G.speedLvl - 1));
-    toast('Faster! Speed ' + G.speedLvl, 1200);
-  }
-  hud();
+  resolveWord();
 }
 function land() {
   const t = G.active;
@@ -416,10 +468,10 @@ function land() {
   G.stacks[t.col].push(t);
   placeTile(t);
   if (!G.missed.includes(t.word)) G.missed.push(t.word);
-  G.queue.splice(Math.min(3, G.queue.length), 0, t.word);
-  G.streak = 0; G.active = null; G.spawnDelay = 0.4;
-  beep(false); hud();
-  if (G.stacks[t.col].length >= G.rows) gameOver();
+  G.streak = 0;
+  beep(false);
+  if (G.stacks[t.col].length >= G.rows) { G.active = null; levelEnd(); return; }
+  resolveWord();
 }
 function relayoutCol(col) {
   G.stacks[col].forEach((t, i) => { t.y = G.H - (i + 1) * G.rowH; placeTile(t); });
@@ -428,9 +480,8 @@ function rescue(t) {
   const col = t.col, idx = G.stacks[col].indexOf(t);
   if (idx < 0) return;
   G.stacks[col].splice(idx, 1);
-  floatText('+5', col * G.colW + 8, t.y);
+  floatText('✓', col * G.colW + 8, t.y);
   popTile(t); beep(true);
-  G.score += 5; hud();
   relayoutCol(col);
   closeRescue();
 }
@@ -468,11 +519,10 @@ function frame(now) {
   G.last = now;
   if (!G.paused) {
     if (!G.active) {
-      G.spawnDelay -= dt;
-      if (G.spawnDelay <= 0) spawn();
+      if (G.queue.length) { G.spawnDelay -= dt; if (G.spawnDelay <= 0) spawn(); }
     } else {
       const t = G.active;
-      t.y += (G.H / G.fallSec) * dt;
+      t.y += t.v * dt;
       if (t.y >= stackTop(t.col)) land(); else placeTile(t);
     }
   } else if (G.active) {
@@ -484,24 +534,25 @@ function frame(now) {
 function clearBoard() {
   $$('#board .tile, #board .float, #board .countdown').forEach((e) => e.remove());
 }
-function startGame() {
+function startGame(levelIdx) {
   G.list = getList(settings.listId);
   if (!G.list.words.length) { toast('This list has no words'); return; }
+  if (levelIdx == null) levelIdx = nextLevelIdx(G.list);
   show('game');
   $('#overOverlay').classList.add('hidden'); $('#pauseOverlay').classList.add('hidden'); closeRescue();
   clearBoard();
   measure();
+  const words = levelWords(G.list, levelIdx);
   Object.assign(G, {
-    stacks: Array.from({ length: G.cols }, () => []), active: null, queue: [],
+    stacks: Array.from({ length: G.cols }, () => []), active: null, queue: words, levelIdx, total: words.length, resolved: 0,
     score: 0, streak: 0, bestStreak: 0, read: 0, missed: [], times: [],
-    baseFall: +settings.speed, fallSec: +settings.speed, speedLvl: 1, colorIdx: 0, paused: false, spawnDelay: 0,
+    fallSec: levelSec(levelIdx), colorIdx: 0, paused: false, spawnDelay: 0,
   });
   hud();
   const useMic = settings.mic === 'mic' && recog.supported;
   recog.onWords = onHeard;
   if (useMic) recog.start(); else { recog.stop(); $('#heard').textContent = recog.supported ? 'Mic off (parent mode)' : 'No speech recognition in this browser'; }
-  // speech synthesis needs a user gesture to unlock on mobile
-  if ('speechSynthesis' in window) { const u = new SpeechSynthesisUtterance(''); speechSynthesis.speak(u); }
+  if ('speechSynthesis' in window) speechSynthesis.speak(new SpeechSynthesisUtterance(''));
   countdown(3, () => { G.running = true; G.last = performance.now(); G.raf = requestAnimationFrame(frame); });
 }
 function countdown(n, done) {
@@ -521,17 +572,30 @@ function setPaused(p) {
 function stopGame() {
   G.running = false; cancelAnimationFrame(G.raf); recog.stop(); closeRescue();
 }
-function gameOver() {
+function levelEnd() {
   stopGame();
-  const listId = G.list.id;
-  const prev = bests[listId] || 0;
-  if (G.score > prev) { bests[listId] = G.score; save(BEST_KEY, bests); }
-  $('#finScore').textContent = G.score;
-  $('#finRead').textContent = G.read;
+  const max = G.total * MAX_PTS;
+  const pct = Math.round(G.score / max * 100);
+  const passed = pct >= PASS_PCT;
+  const p = prog(G.list.id);
+  const prev = p[G.levelIdx];
+  const isBest = !prev || G.score > prev.score;
+  if (isBest) { p[G.levelIdx] = { pct, score: G.score }; save(BEST_KEY, progress); }
+  const hasNext = G.levelIdx + 1 < levelCount(G.list);
+  $('#finTitle').textContent = passed ? `Level ${G.levelIdx + 1} passed! 🎉` : `Level ${G.levelIdx + 1}: try again`;
+  $('#finPct').textContent = pct + '%';
+  $('#finPct').classList.toggle('fail', !passed);
+  $('#finBar').style.width = '0';
+  requestAnimationFrame(() => requestAnimationFrame(() => { $('#finBar').style.width = Math.min(100, pct) + '%'; }));
+  $('#finBar').style.background = passed ? 'var(--ok)' : 'var(--danger)';
+  $('#finScore').textContent = `${G.score} / ${max}`;
+  $('#finRead').textContent = `${G.read} / ${G.total}`;
   $('#finStreak').textContent = G.bestStreak;
   const avg = G.times.length ? (G.times.reduce((a, b) => a + b, 0) / G.times.length) : 0;
   $('#finAvg').textContent = G.times.length ? avg.toFixed(1) + 's' : '–';
-  $('#finBest').textContent = G.score > prev && G.score > 0 ? '🏆 New best score!' : prev ? `Best: ${prev}` : '';
+  $('#finBest').textContent = (passed ? (hasNext ? `Level ${G.levelIdx + 2} unlocked. ` : 'All levels passed! ') : `Need ${PASS_PCT}% to pass. `)
+    + (isBest && prev ? 'New best score!' : prev ? `Best: ${prev.pct}%` : '');
+  $('#nextBtn').classList.toggle('hidden', !(passed && hasNext));
   const m = $('#finMissed'); m.innerHTML = '';
   $('#finMissedWrap').classList.toggle('hidden', !G.missed.length);
   for (const w of G.missed) {
@@ -547,7 +611,8 @@ $('#hintBtn').onclick = () => { if (G.active && G.running && !G.paused) { G.acti
 $('#pauseBtn').onclick = () => setPaused(true);
 $('#resumeBtn').onclick = () => setPaused(false);
 $('#quitBtn').onclick = () => { stopGame(); show('home'); renderHome(); };
-$('#againBtn').onclick = () => startGame();
+$('#againBtn').onclick = () => startGame(G.levelIdx);
+$('#nextBtn').onclick = () => startGame(G.levelIdx + 1);
 $('#menuBtn').onclick = () => { show('home'); renderHome(); };
 document.addEventListener('keydown', (e) => {
   if (!$('#game').classList.contains('active') || !G.running) return;
@@ -558,18 +623,17 @@ document.addEventListener('visibilitychange', () => { if (document.hidden && G.r
 window.addEventListener('resize', () => {
   if (!G.running) return;
   const oldH = G.H;
-  const b = $('#board'); G.W = b.clientWidth; G.H = b.clientHeight;
-  G.colW = G.W / G.cols;
-  G.rowH = Math.max(44, Math.min(70, Math.round(G.H / 9)));
-  G.rows = Math.max(4, Math.floor(G.H / G.rowH));
-  b.style.setProperty('--colw', G.colW + 'px');
-  $('#dangerLine').style.top = (G.H - G.rows * G.rowH) + G.rowH + 'px';
+  layout();
   G.stacks.forEach((s, c) => { s.forEach((t) => fitFont(t.el, t.word)); relayoutCol(c); });
-  if (G.active) { G.active.y = G.active.y * (G.H / oldH); fitFont(G.active.el, G.active.word); placeTile(G.active); }
+  if (G.active) {
+    const f = G.H / oldH;
+    G.active.y *= f; G.active.v *= f;
+    fitFont(G.active.el, G.active.word); placeTile(G.active);
+  }
 });
 
 // ---------- init ----------
 checkHashImport();
 renderHome();
 window.addEventListener('hashchange', () => { checkHashImport(); renderHome(); });
-window.__twd = { G, splitThai, encodeList, decodeList, onHeard, correctActive };
+window.__twd = { G, splitThai, encodeList, decodeList, onHeard, correctActive, levelWords, getList };
