@@ -24,4 +24,10 @@ Static site: no build step, no server code. Serve the folder with any static ser
 - **Gemini (optional, most accurate):** add a Gemini API key in Settings (saved only in that browser). Photos are read and split into words or sums, and Gemini can add ~30 more items at the same difficulty as the page. "✨ Make words for age N" creates a list from a topic.
 - **Built-in reader:** Tesseract.js, works offline but makes mistakes.
 
+## Book photos set the difficulty
+Every photo you read is kept per child and subject as a reference: a small thumbnail, the words or sums found on it, and a school grade level (estimated by Gemini, or by word length/number size with the built-in reader).
+- **📚 From <name>'s books**: one list per subject that grows with every photo.
+- Once a subject has photos, its difficulty comes from them instead of age (weighted average of the last 6, newest counting most). This picks the built-in word bank, math difficulty, Mix content and what Gemini generates.
+- Photos are shown under the word lists; tap one to view or delete it.
+
 Lists can be shared with the 🔗 button (the list is encoded in the link).

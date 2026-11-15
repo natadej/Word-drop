@@ -168,3 +168,11 @@ label input[type=text]{width:100%}
 .tile.math{letter-spacing:.5px}
 .badge{font-size:12px;font-weight:800;padding:1px 6px;border-radius:6px;background:var(--surface);color:var(--accent);margin-left:6px;vertical-align:middle}
 #profileList.hidden + .step{border-top:0;padding-top:0;margin-top:0}
+.refs{border-top:1px dashed var(--surface2);margin-top:14px;padding-top:10px}
+.refs h3{margin:0 0 4px}
+.refs .hint{margin:0 0 8px}
+.refs-strip{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
+.ref-thumb{flex:0 0 auto;width:72px;border:0;padding:0;background:var(--surface2);border-radius:10px;overflow:hidden;cursor:pointer;color:var(--text);font:inherit}
+.ref-thumb img{width:72px;height:72px;object-fit:cover;display:block}
+.ref-thumb span{display:block;font-size:11px;font-weight:800;padding:2px 0;text-align:center}
+.ref-img{max-width:100%;max-height:45vh;border-radius:10px;align-self:center}

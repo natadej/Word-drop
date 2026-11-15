@@ -46,6 +46,11 @@
       <button id="newListBtn" class="btn primary">+ New list</button>
     </div>
     <ul id="listList" class="list-list"></ul>
+    <div id="refsBox" class="refs">
+      <h3>📚 Book photos</h3>
+      <p id="refsInfo" class="hint"></p>
+      <div id="refsStrip" class="refs-strip"></div>
+    </div>
   </div>
 
   <div class="panel">
@@ -251,6 +256,20 @@
     </div>
   </div>
 </section>
+
+<!-- BOOK PHOTO -->
+<div id="refOverlay" class="overlay hidden">
+  <div class="dialog wide left">
+    <h2 id="refTitle">Book photo</h2>
+    <img id="refImg" class="ref-img" alt="">
+    <p id="refInfo" class="hint"></p>
+    <div id="refItems" class="chips"></div>
+    <div class="row end">
+      <button id="refDelete" class="btn danger">Delete</button>
+      <button id="refClose" class="btn primary">Close</button>
+    </div>
+  </div>
+</div>
 
 <!-- PROFILES -->
 <div id="profileOverlay" class="overlay hidden">
