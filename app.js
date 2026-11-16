@@ -164,14 +164,43 @@ function itemFor(text, lang) {
   if (lang === 'math') { const e = parseExpr(text); return e ? { text: e.text + ' = ?', lang, answer: e.answer, plain: e.text } : null; }
   return { text, lang };
 }
+function thaiNum(n) {
+  if (!n || n >= 1e7) return n ? String(n) : 'ศูนย์';
+  const D = ['', 'หนึ่ง', 'สอง', 'สาม', 'สี่', 'ห้า', 'หก', 'เจ็ด', 'แปด', 'เก้า'], U = ['', 'สิบ', 'ร้อย', 'พัน', 'หมื่น', 'แสน', 'ล้าน'];
+  const d = [...String(n)].reverse().map(Number);
+  return d.map((v, i) => (!v ? '' : (i === 1 && v === 1 ? '' : i === 1 && v === 2 ? 'ยี่' : i === 0 && v === 1 && d.length > 1 ? 'เอ็ด' : D[v]) + U[i])).reverse().join('');
+}
+// Letters that sound the same are merged and tone marks dropped, so the speech recognizer's spelling choice doesn't matter.
+const TH_SOUND = { ฃ: 'ข', ค: 'ข', ฅ: 'ข', ฆ: 'ข', ฌ: 'ช', ซ: 'ส', ศ: 'ส', ษ: 'ส', ญ: 'ย', ฎ: 'ด', ฏ: 'ต', ฐ: 'ท', ฑ: 'ท', ฒ: 'ท', ถ: 'ท', ธ: 'ท', ณ: 'น', ผ: 'พ', ภ: 'พ', ฝ: 'ฟ', ร: 'ล', ฬ: 'ล', ฮ: 'ห' };
+const soundKey = (s) => normalize(s).replace(/\d+/g, (m) => thaiNum(+m))
+  .replace(/[\u0E01-\u0E2E][\u0E34\u0E38]?\u0E4C/g, '').replace(/[\u0E47-\u0E4E]/g, '')
+  .replace(/[\u0E01-\u0E2E]/g, (c) => TH_SOUND[c] || c);
+function fuzzyIn(w, s, k) { // is w within k edits of some part of s?
+  if (!k) return s.includes(w);
+  let prev = Array.from({ length: w.length + 1 }, (_, i) => i);
+  for (const ch of s) {
+    const cur = [0];
+    for (let i = 1; i <= w.length; i++) cur[i] = Math.min(prev[i] + 1, cur[i - 1] + 1, prev[i - 1] + (w[i - 1] === ch ? 0 : 1));
+    if (cur[w.length] <= k) return true;
+    prev = cur;
+  }
+  return prev[w.length] <= k;
+}
 function matches(item, alts) {
   if (item.lang === 'math') return alts.some((a) => { const n = numbersIn(a); return n.length && n[n.length - 1] === item.answer; });
   if (item.lang === 'en') {
     const w = item.text.toLowerCase().replace(/[^a-z' ]/g, '').trim();
-    return alts.some((a) => (' ' + a.toLowerCase().replace(/[^a-z' ]/g, ' ').replace(/\s+/g, ' ') + ' ').includes(' ' + w + ' '));
+    return alts.some((a) => {
+      const s = a.toLowerCase().replace(/[^a-z' ]/g, ' ').replace(/\s+/g, ' ').trim();
+      if ((' ' + s + ' ').includes(' ' + w + ' ')) return true;
+      return !w.includes(' ') && s.split(' ').some((x) => x === w + 's' || x === w + 'es' || (w.length >= 5 && Math.abs(x.length - w.length) <= 1 && fuzzyIn(w, x, 1)));
+    });
   }
   const w = normalize(item.text);
-  return alts.some((a) => normalize(a).includes(w));
+  if (alts.some((a) => normalize(a).includes(w))) return true;
+  if (item.lang !== 'th') return false;
+  const key = soundKey(item.text), k = key.length >= 8 ? 2 : key.length >= 4 ? 1 : 0;
+  return !!key && alts.some((a) => fuzzyIn(key, soundKey(a), k));
 }
 const sayText = (item) => (item.lang === 'math' ? String(item.answer) : item.text);
 
@@ -180,11 +209,12 @@ function say(text, lang) {
   if (!('speechSynthesis' in window)) { toast('Speech not available on this device'); return; }
   speechSynthesis.cancel();
   const code = lang === 'math' ? profile().mathLang : SR_LANG[lang] || 'th-TH';
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = code; u.rate = 0.8;
-  const v = speechSynthesis.getVoices().find((x) => x.lang.replace('_', '-').toLowerCase().startsWith(code.slice(0, 2).toLowerCase()));
+  const u = say.u = new SpeechSynthesisUtterance(text);
+  u.lang = code; u.rate = code === 'th-TH' ? 0.7 : 0.8;
+  const vs = speechSynthesis.getVoices().filter((x) => x.lang.replace('_', '-').toLowerCase().startsWith(code.slice(0, 2).toLowerCase()));
+  const v = vs.find((x) => /google/i.test(x.name)) || vs[0];
   if (v) u.voice = v;
-  if (recog.active) recog.pauseFor(1500 + String(text).length * 200);
+  if (recog.active) recog.holdForSpeech(u);
   speechSynthesis.speak(u);
 }
 
@@ -677,20 +707,28 @@ $('#aiGenBtn').onclick = async () => {
 const recog = (() => {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const r = { supported: !!SR, active: false, onWords: null, paused: false, lang: 'th-TH' };
-  let inst = null, restartTimer = null, pauseTimer = null;
+  let inst = null, restartTimer = null, pauseTimer = null, cut = null;
   const dot = () => $('#micDot'), heard = () => $('#heard');
   function create() {
-    inst = new SR();
+    inst = new SR(); cut = null;
     inst.lang = r.lang; inst.continuous = true; inst.interimResults = true; inst.maxAlternatives = 5;
     inst.onstart = () => { dot().classList.add('on'); if (heard().textContent.startsWith('Mic')) heard().textContent = 'Listening… read it!'; };
     inst.onresult = (ev) => {
       const alts = []; let display = '';
-      for (let i = ev.resultIndex; i < ev.results.length; i++) {
-        const res = ev.results[i]; display += res[0].transcript;
+      // Keep listening after a correct word (restarting the mic loses what he says next); skip speech already used.
+      for (let i = Math.max(ev.resultIndex, cut ? cut.i : 0); i < ev.results.length; i++) {
+        const res = ev.results[i];
+        if (cut && i === cut.i) {
+          if (!res[0].transcript.startsWith(cut.tx)) continue;
+          const rest = res[0].transcript.slice(cut.tx.length); display += rest; alts.push(rest); continue;
+        }
+        display += res[0].transcript;
         for (let j = 0; j < res.length; j++) alts.push(res[j].transcript);
       }
       if (display.trim()) heard().textContent = 'Heard: ' + display.trim();
-      if (r.onWords && !r.paused && r.onWords(alts)) { try { inst.abort(); } catch {} }
+      if (r.onWords && !r.paused && alts.some((a) => a.trim()) && r.onWords(alts)) {
+        const i = ev.results.length - 1; cut = { i, tx: ev.results[i][0].transcript };
+      }
     };
     inst.onerror = (e) => {
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
@@ -716,6 +754,11 @@ const recog = (() => {
     if (r.lang === code) return;
     r.lang = code;
     if (r.active && inst) { try { inst.abort(); } catch {} }
+  };
+  r.holdForSpeech = (u) => { // mic off while the word is spoken, back on once speech has finished
+    r.pauseFor(8000);
+    const done = () => { clearTimeout(pauseTimer); pauseTimer = setTimeout(() => { r.paused = false; }, 350); };
+    u.addEventListener('end', done); u.addEventListener('error', done);
   };
   r.pauseFor = (ms) => {
     r.paused = true; if (inst) { try { inst.abort(); } catch {} }
@@ -951,4 +994,4 @@ window.addEventListener('resize', () => {
 checkHashImport();
 renderHome();
 window.addEventListener('hashchange', () => { checkHashImport(); renderHome(); });
-window.__twd = { refs, bookGrade, bookList, addRef, guessGrade, G, splitText, encodeList, decodeList, onHeard, correctActive, levelItems, getList, numbersIn, parseExpr, matches, mathItem, streak, days, progress };
+window.__twd = { soundKey, thaiNum, say, recog, refs, bookGrade, bookList, addRef, guessGrade, G, splitText, encodeList, decodeList, onHeard, correctActive, levelItems, getList, numbersIn, parseExpr, matches, mathItem, streak, days, progress };
