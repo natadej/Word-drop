@@ -177,3 +177,22 @@ label input[type=text]{width:100%}
 .ref-thumb span{display:block;font-size:11px;font-weight:800;padding:2px 0;text-align:center}
 .ref-img{max-width:100%;max-height:45vh;border-radius:10px;align-self:center}
 .tabs.ocr-lang{grid-template-columns:repeat(4,1fr);margin-bottom:10px}
+.cloud{border-top:1px solid var(--surface2);padding-top:10px}
+.cloud-head{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.cloud textarea{width:100%;box-sizing:border-box;font-family:monospace;font-size:13px;margin:6px 0}
+.cloud summary{cursor:pointer;color:var(--muted);margin-top:8px}
+.dialog.warm{width:560px;gap:10px}
+.warm-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.warm-word{font-family:var(--thai);font-size:clamp(56px,14vw,96px);line-height:1.2;font-weight:700}
+.warm-parts{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+.warm-parts .part{display:flex;flex-direction:column;align-items:center;background:var(--surface2);border-radius:10px;padding:6px 10px;min-width:44px}
+.warm-parts .part b{font-family:var(--thai);font-size:28px}
+.warm-parts .part small{font-size:12px;color:var(--muted)}
+.warm-parts .part.init b{color:#4dabf7}
+.warm-parts .part.vowel b{color:#ffa94d}
+.warm-parts .part.final b{color:#69db7c}
+.warm-parts .part.tone b{color:#f783ac}
+.warm-parts .part.syl{background:#3b3570}
+.warm-parts .part.silent b{color:var(--muted);text-decoration:line-through}
+.learn-msg{margin:0}
+#cloudBtn{margin-left:auto}
