@@ -10,7 +10,7 @@ Static site: no build step, no server code. Serve the folder with any static ser
 - **Mix**: 15 items per level mixing all four; the mic switches language for each item.
 
 ## Levels and scoring
-- 15 items per level; each item is worth up to 100 points (100 within 1 s, down to 60 just before it lands, 0 if missed, half with "Hear it").
+- 15 items per level; each item is worth up to 100 points (timed from when it touches the red line: 100 within 1 s, down to 60 just before it lands, 0 if missed, half with "Hear it").
 - 80% of the points passes the level and unlocks the next one.
 - Level 1 starts at 3 s per item (setting), each level 0.1 s faster, minimum 1.8 s.
 

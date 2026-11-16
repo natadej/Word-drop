@@ -443,7 +443,8 @@ function closeProfiles() { $('#profileOverlay').classList.add('hidden'); }
 $('#profileBtn').onclick = () => openProfiles(false);
 $('#pfCancel').onclick = closeProfiles;
 $('#pfSave').onclick = () => {
-  const name = $('#pfName').value.trim() || 'Luffy', age = +$('#pfAge').value;
+  const name = $('#pfName').value.trim(), age = +$('#pfAge').value;
+  if (!name) { toast('Please input your name'); $('#pfName').focus(); return; }
   if (pfEditing) Object.assign(pfEditing, { name, age });
   else {
     const np = newProfile(name, age);
@@ -480,6 +481,7 @@ function openEditor(list) {
 function updateEditorInfo() {
   const g = !!settings.gemini;
   const ot = OpenThai.langs.includes(edSubject());
+  document.querySelectorAll('#ocrLang button').forEach((b) => b.classList.toggle('sel', b.dataset.subject === edSubject()));
   $('#readerInfo').textContent = g ? 'Photos are read by Gemini AI (accurate).'
     : ot ? 'Photos are read on this device by the free OpenThai reader (good for printed Thai and English). Add a Gemini key in Settings for grade levels and extra words.'
     : 'Photos are read by the free built-in reader, which makes mistakes. For better accuracy use Google Lens (below), or add a Gemini key in Settings.';
@@ -488,6 +490,7 @@ function updateEditorInfo() {
   $('#aiGenBtn').textContent = `✨ Make ${edSubject() === 'math' ? 'problems' : 'words'} for age ${profile().age}`;
 }
 $('#listSubject').onchange = updateEditorInfo;
+document.querySelectorAll('#ocrLang button').forEach((b) => { b.onclick = () => { $('#listSubject').value = b.dataset.subject; updateEditorInfo(); }; });
 function renderChips() {
   const c = $('#chips'); c.innerHTML = '';
   edit.words.forEach((w, i) => {
@@ -733,7 +736,8 @@ function layout() {
   G.rowH = Math.max(44, Math.min(70, Math.round(G.H / 9)));
   G.rows = Math.max(4, Math.floor(G.H / G.rowH));
   b.style.setProperty('--colw', G.colW + 'px');
-  $('#dangerLine').style.top = (G.H - G.rows * G.rowH) + G.rowH + 'px';
+  G.lineY = (G.H - G.rows * G.rowH) + G.rowH;
+  $('#dangerLine').style.top = G.lineY + 'px';
 }
 function measure() { const w = $('#board').clientWidth; G.cols = w >= 700 ? 5 : w >= 480 ? 4 : 3; layout(); }
 const stackTop = (col) => G.H - (G.stacks[col].length + 1) * G.rowH;
@@ -757,7 +761,7 @@ function makeTile(item, col) {
   el.style.background = TILE_COLORS[G.colorIdx++ % TILE_COLORS.length];
   fitFont(el, item.text);
   $('#board').appendChild(el);
-  return { item, col, y: -G.rowH, el, born: performance.now(), hinted: false, pausedMs: 0 };
+  return { item, col, y: -G.rowH, el, born: performance.now(), lineAt: null, hinted: false, pausedMs: 0 };
 }
 function spawn() {
   const item = G.queue.shift();
@@ -794,9 +798,9 @@ function beep(ok) {
     o.start(now); o.stop(now + 0.3);
   } catch {}
 }
-function pointsFor(sec) {
+function pointsFor(sec, span) { // sec counts from the red line; span = time from the line to the stack
   if (sec <= 1) return MAX_PTS;
-  return Math.max(60, Math.round(MAX_PTS - 40 * (sec - 1) / Math.max(0.5, G.fallSec - 1)));
+  return Math.max(60, Math.round(MAX_PTS - 40 * (sec - 1) / Math.max(0.5, span - 1)));
 }
 function resolveWord() {
   G.active = null; G.resolved++; G.spawnDelay = 0.35; hud();
@@ -805,8 +809,8 @@ function resolveWord() {
 function correctActive(byMic) {
   const t = G.active;
   if (!t || !G.running || G.paused) return;
-  const sec = (performance.now() - t.born - t.pausedMs) / 1000;
-  let pts = pointsFor(sec); if (t.hinted) pts = Math.round(pts / 2);
+  const sec = t.lineAt == null ? 0 : (performance.now() - t.lineAt - (t.pausedMs - t.pausedAtLine)) / 1000;
+  let pts = pointsFor(sec, t.span); if (t.hinted) pts = Math.round(pts / 2);
   G.score += pts; G.streak++; G.read++; G.bestStreak = Math.max(G.bestStreak, G.streak); G.times.push(sec);
   floatText('+' + pts + (byMic ? ' 🎤' : ''), t.col * G.colW + 8, t.y);
   popTile(t); beep(true); resolveWord();
@@ -854,7 +858,11 @@ function frame(now) {
   const dt = Math.min(0.05, (now - G.last) / 1000); G.last = now;
   if (!G.paused) {
     if (!G.active) { if (G.queue.length) { G.spawnDelay -= dt; if (G.spawnDelay <= 0) spawn(); } }
-    else { const t = G.active; t.y += t.v * dt; if (t.y >= stackTop(t.col)) land(); else placeTile(t); }
+    else {
+      const t = G.active; t.y += t.v * dt;
+      if (t.lineAt == null && t.y + G.rowH >= G.lineY) { t.lineAt = now; t.pausedAtLine = t.pausedMs; t.span = Math.max(0, stackTop(t.col) - t.y) / t.v; }
+      if (t.y >= stackTop(t.col)) land(); else placeTile(t);
+    }
   } else if (G.active) G.active.pausedMs += dt * 1000;
   G.raf = requestAnimationFrame(frame);
 }

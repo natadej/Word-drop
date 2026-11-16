@@ -128,6 +128,13 @@
 
     <div class="step">
       <h3>1. Photo of the schoolbook <span class="muted">(or paste text below)</span></h3>
+      <p class="hint">Read the photo as:</p>
+      <div id="ocrLang" class="tabs ocr-lang">
+        <button type="button" data-subject="th"><b>ไทย</b><small>Thai</small></button>
+        <button type="button" data-subject="en"><b>ABC</b><small>English</small></button>
+        <button type="button" data-subject="math"><b>1+2</b><small>Math</small></button>
+        <button type="button" data-subject="zh"><b>中文</b><small>Chinese</small></button>
+      </div>
       <div class="row">
         <label class="btn primary file-btn">📷 Take photo
           <input id="photoCam" type="file" accept="image/*" capture="environment" hidden>
@@ -279,7 +286,7 @@
     <div class="step">
       <h3 id="pfTitle">New profile</h3>
       <div class="row two">
-        <label>Name <input id="pfName" type="text" placeholder="Luffy"></label>
+        <label>Name <input id="pfName" type="text" placeholder="Input your name"></label>
         <label>Age
           <select id="pfAge"></select>
         </label>
