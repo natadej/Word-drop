@@ -205,10 +205,66 @@ function matches(item, alts) {
 const sayText = (item) => (item.lang === 'math' ? String(item.answer) : item.text);
 
 // ---------- speech synthesis ----------
-function say(text, lang) {
-  if (!('speechSynthesis' in window)) { toast('Speech not available on this device'); return; }
-  speechSynthesis.cancel();
+// Natural voices: pre-recorded files for built-in words (audio/index.json), Gemini voice for other words when a key is set
+// (saved after the first time), otherwise the phone's own voice.
+let voiceIndex = null;
+const loadVoiceIndex = () => voiceIndex || (voiceIndex = fetch('audio/index.json').then((r) => r.json()).catch(() => ({})));
+const player = new Audio();
+const VOICE_CACHE = 'twd-voice-v1';
+function playUrl(url) {
+  window.speechSynthesis?.cancel();
+  player.pause(); player.src = url;
+  if (recog.active) recog.holdForSpeech(player, ['ended', 'error', 'pause']);
+  return player.play().then(() => true, () => false);
+}
+function pcmToWav(b64) {
+  const pcm = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)), rate = 24000;
+  const buf = new ArrayBuffer(44 + pcm.length), v = new DataView(buf);
+  const str = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  str(0, 'RIFF'); v.setUint32(4, 36 + pcm.length, true); str(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); str(36, 'data'); v.setUint32(40, pcm.length, true);
+  new Uint8Array(buf, 44).set(pcm);
+  return new Blob([buf], { type: 'audio/wav' });
+}
+async function geminiVoice(text, code) {
+  const key = `https://voice.cache/${code}/${encodeURIComponent(text)}`;
+  const cache = window.caches ? await caches.open(VOICE_CACHE) : null;
+  const hit = cache && await cache.match(key);
+  if (hit) return URL.createObjectURL(await hit.blob());
+  if (!settings.gemini || geminiVoice.off > Date.now()) return null;
+  const langName = { 'th-TH': 'Thai', 'en-US': 'English', 'zh-CN': 'Mandarin Chinese' }[code] || 'Thai';
+  const job = fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${encodeURIComponent(settings.gemini)}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: `Say this ${langName} word clearly and warmly, like a friendly teacher to a young child: ${text}` }] }],
+      generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Leda' } } } },
+    }),
+  }).then(async (r) => {
+    if (!r.ok) { geminiVoice.off = Date.now() + 10 * 60e3; return null; }
+    const b64 = (await r.json()).candidates?.[0]?.content?.parts?.find((p) => p.inlineData)?.inlineData?.data;
+    if (!b64) return null;
+    const blob = pcmToWav(b64);
+    if (cache) await cache.put(key, new Response(blob));
+    return URL.createObjectURL(blob);
+  }).catch(() => null);
+  return Promise.race([job, new Promise((res) => setTimeout(() => res(null), 3000))]);
+}
+async function say(text, lang) {
   const code = lang === 'math' ? profile().mathLang : SR_LANG[lang] || 'th-TH';
+  const rel = (await loadVoiceIndex())[code]?.[String(text)];
+  if (rel && await playUrl('audio/' + rel)) return;
+  if (lang !== 'math') { const url = await geminiVoice(String(text), code); if (url && await playUrl(url)) return; }
+  sayDevice(text, code);
+}
+async function praise(k, lang) {
+  const code = SR_LANG[lang] || (lang === 'math' ? profile().mathLang : 'th-TH');
+  const idx = (await loadVoiceIndex())[code];
+  const lines = idx && Object.keys(idx).filter((t) => /[!！]$/.test(t));
+  if (lines && lines[k]) playUrl('audio/' + idx[lines[k]]);
+}
+function sayDevice(text, code) {
+  if (!('speechSynthesis' in window)) { toast('Speech not available on this device'); return; }
+  speechSynthesis.cancel(); player.pause();
   const u = say.u = new SpeechSynthesisUtterance(text);
   u.lang = code; u.rate = code === 'th-TH' ? 0.7 : 0.8;
   const vs = speechSynthesis.getVoices().filter((x) => x.lang.replace('_', '-').toLowerCase().startsWith(code.slice(0, 2).toLowerCase()));
@@ -300,11 +356,13 @@ function recordDay(passed, read, score) {
   d[today()] = r; save(K.days, days);
   return r;
 }
+const dayOk = (k) => dayRec(k).passed >= +profile().goal;
+const isFrozen = (k) => (typeof F === 'function' && (F().frozen || []).includes(k));
 function streak() {
-  const goal = +profile().goal; let n = 0;
+  let n = 0;
   const d = new Date();
-  if (dayRec(dateKey(d)).passed < goal) d.setDate(d.getDate() - 1);
-  while (dayRec(dateKey(d)).passed >= goal) { n++; d.setDate(d.getDate() - 1); }
+  if (!dayOk(dateKey(d))) d.setDate(d.getDate() - 1);
+  for (let k = dateKey(d); dayOk(k) || isFrozen(k); d.setDate(d.getDate() - 1), k = dateKey(d)) if (dayOk(k)) n++;
   return n;
 }
 function renderToday() {
@@ -318,9 +376,10 @@ function renderToday() {
     const d = new Date(); d.setDate(d.getDate() - k);
     const rec = dayRec(dateKey(d));
     const el = document.createElement('div');
-    el.className = 'day' + (rec.passed >= goal ? ' passed' : rec.played ? ' played' : '') + (k === 0 ? ' today' : '');
+    const fz = rec.passed < goal && isFrozen(dateKey(d));
+    el.className = 'day' + (rec.passed >= goal ? ' passed' : fz ? ' frozen' : rec.played ? ' played' : '') + (k === 0 ? ' today' : '');
     el.title = `${dateKey(d)}: ${rec.passed} passed, ${rec.played} played`;
-    el.innerHTML = `<i>${rec.passed >= goal ? '✓' : rec.passed || ''}</i><span>${'SMTWTFS'[d.getDay()]}</span>`;
+    el.innerHTML = `<i>${rec.passed >= goal ? '✓' : fz ? '🧊' : rec.passed || ''}</i><span>${'SMTWTFS'[d.getDay()]}</span>`;
     row.appendChild(el);
   }
 }
@@ -355,11 +414,11 @@ async function shareList(l) {
 function renderHome() {
   if (!profile()) { openProfiles(true); return; }
   const p = profile();
-  $('#profileName').textContent = `${p.name} · ${p.age}`;
+  $('#profileName').textContent = p.name;
   renderToday();
   $$('#subjectTabs button').forEach((b) => b.classList.toggle('sel', b.dataset.subject === settings.subject));
   const s = settings.subject, cur = currentList();
-  $('#listsPanel').classList.toggle('hidden', s === 'mix');
+  $('#listsPanel').classList.toggle('hidden', s === 'mix'); $('#mixNote').classList.toggle('hidden', s !== 'mix');
   const ul = $('#listList'); ul.innerHTML = '';
   for (const l of subjectLists(s)) {
     const li = document.createElement('li');
@@ -371,7 +430,7 @@ function renderHome() {
       <span class="best">${passedN}/${n} ✓</span>
       <button class="btn small" data-act="play">▶</button>
       ${l.builtin ? '' : '<button class="btn small ghost" data-act="edit">✎</button><button class="btn small ghost" data-act="share" title="Share link">🔗</button>'}`;
-    li.querySelector('.name').onclick = () => { settings.listId[s] = l.id; saveAll(); renderHome(); };
+    li.querySelector('.name').onclick = () => { settings.listId[s] = l.id; saveAll(); showTab('learn'); };
     li.querySelector('[data-act=play]').onclick = () => { settings.listId[s] = l.id; saveAll(); startGame(l.id); };
     const e = li.querySelector('[data-act=edit]'); if (e) e.onclick = () => openEditor(l);
     const sh = li.querySelector('[data-act=share]'); if (sh) sh.onclick = () => shareList(l);
@@ -379,7 +438,7 @@ function renderHome() {
   }
   if (s !== 'mix') renderRefs(s);
   renderLevels();
-  $('#settingsTitle').textContent = `Settings for ${p.name}`;
+  if (typeof renderFun === 'function') renderFun();
   $('#setSpeed').value = p.speed; $('#setGoal').value = p.goal; $('#setMathLang').value = p.mathLang;
   $('#setOrder').value = p.order; $('#setMic').value = p.mic;
   $('#setGemini').value = settings.gemini || '';
@@ -419,24 +478,40 @@ $('#refDelete').onclick = () => {
 };
 function renderLevels() {
   const list = currentList();
-  $('#levelsTitle').textContent = `${SUBJECTS[list.subject]} levels: ${list.name}`;
+  $('#levelsTitle').textContent = list.name;
   const box = $('#levels'); box.innerHTML = '';
-  const p = prog(list.id);
+  const p = prog(list.id), next = nextLevelIdx(list);
+  const SWAY = [0, 1, 1.6, 1, 0, -1, -1.6, -1];
   for (let i = 0; i < levelCount(list); i++) {
-    const unlocked = isUnlocked(list.id, i), best = p[i], passed = best && best.pct >= PASS_PCT;
+    const unlocked = isUnlocked(list.id, i), best = p[i], passed = best && best.pct >= PASS_PCT, cur = unlocked && i === next;
     const b = document.createElement('button');
-    b.className = 'level-card' + (unlocked ? '' : ' locked') + (passed ? ' passed' : '');
-    const preview = list.words ? list.words.slice(i * LEVEL_SIZE, i * LEVEL_SIZE + 4).join(' ') + '…'
-      : list.gen === 'math' ? mathItem(diffBand('math'), i + mathOffset()) + ' …' : 'ไทย · ABC · 中文 · 1+2';
-    b.innerHTML = `<span class="lv">Level ${i + 1} · ${levelSec(i).toFixed(1)}s</span>
-      <span class="lv-name">${unlocked ? (passed ? '✓ Passed' : 'Play') : '🔒 Locked'}</span>
-      <span class="lv-desc ${list.subject}">${escapeHtml(preview)}</span>
-      ${best ? `<span class="lv-best">Best ${best.pct}% · ${best.score}</span>` : ''}`;
+    b.className = 'level-card node' + (unlocked ? '' : ' locked') + (passed ? ' passed' : '') + (cur ? ' current' : '');
+    b.style.setProperty('--x', SWAY[i % SWAY.length]);
+    const preview = list.words ? list.words.slice(i * LEVEL_SIZE, i * LEVEL_SIZE + 3).join(' ')
+      : list.gen === 'math' ? mathItem(diffBand('math'), i + mathOffset()) : 'ไทย · ABC · 中文 · 1+2';
+    b.innerHTML = `${cur ? '<span class="start">START</span>' : ''}
+      <span class="bubble">${unlocked ? (passed ? '★' : i + 1) : '🔒'}</span>
+      <span class="stars-row">${passed ? starsHtml(best.pct) : ''}</span>
+      <span class="lv">Level ${i + 1} · ${levelSec(i).toFixed(1)}s</span>
+      <span class="lv-desc ${list.subject}">${escapeHtml(preview)}</span>`;
     if (unlocked) b.onclick = () => startGame(list.id, i);
     box.appendChild(b);
   }
 }
 $$('#subjectTabs button').forEach((b) => (b.onclick = () => { settings.subject = b.dataset.subject; saveAll(); renderHome(); }));
+const starCount = (pct) => (pct >= 100 ? 3 : pct >= 90 ? 2 : pct >= PASS_PCT ? 1 : 0);
+const starsHtml = (pct) => [1, 2, 3].map((k) => `<i class="${k <= starCount(pct) ? 'on' : ''}">★</i>`).join('');
+let tab = 'learn';
+function showTab(t) {
+  tab = t;
+  ['learn', 'lists', 'ranks', 'me'].forEach((x) => $('#tab-' + x).classList.toggle('hidden', x !== t));
+  $$('#bottomNav button').forEach((b) => b.classList.toggle('sel', b.dataset.tab === t));
+  $('#subjectTabs').classList.toggle('hidden', t === 'ranks' || t === 'me');
+  renderHome(); window.scrollTo(0, 0);
+  if (t === 'ranks' && typeof renderRanks === 'function') renderRanks();
+}
+$$('#bottomNav button').forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
+$('#listPicker').onclick = () => showTab('lists');
 const bindProfileSetting = (id, key) => ($('#' + id).onchange = (e) => { profile()[key] = e.target.value; saveAll(); renderHome(); });
 bindProfileSetting('setSpeed', 'speed'); bindProfileSetting('setGoal', 'goal'); bindProfileSetting('setMathLang', 'mathLang');
 bindProfileSetting('setOrder', 'order'); bindProfileSetting('setMic', 'mic');
@@ -755,10 +830,10 @@ const recog = (() => {
     r.lang = code;
     if (r.active && inst) { try { inst.abort(); } catch {} }
   };
-  r.holdForSpeech = (u) => { // mic off while the word is spoken, back on once speech has finished
+  r.holdForSpeech = (u, evs = ['end', 'error']) => { // mic off while the word is spoken, back on once speech has finished
     r.pauseFor(8000);
-    const done = () => { clearTimeout(pauseTimer); pauseTimer = setTimeout(() => { r.paused = false; }, 350); };
-    u.addEventListener('end', done); u.addEventListener('error', done);
+    const done = () => { evs.forEach((e) => u.removeEventListener(e, done)); clearTimeout(pauseTimer); pauseTimer = setTimeout(() => { r.paused = false; }, 350); };
+    evs.forEach((e) => u.addEventListener(e, done));
   };
   r.pauseFor = (ms) => {
     r.paused = true; if (inst) { try { inst.abort(); } catch {} }
@@ -801,7 +876,8 @@ function makeTile(item, col) {
   const el = document.createElement('div');
   el.className = 'tile active ' + item.lang;
   el.textContent = item.text;
-  el.style.background = TILE_COLORS[G.colorIdx++ % TILE_COLORS.length];
+  const pal = typeof themeColors === 'function' ? themeColors() : TILE_COLORS;
+  el.style.background = pal[G.colorIdx++ % pal.length];
   fitFont(el, item.text);
   $('#board').appendChild(el);
   return { item, col, y: -G.rowH, el, born: performance.now(), lineAt: null, hinted: false, pausedMs: 0 };
@@ -830,12 +906,13 @@ function floatText(txt, x, y) {
   $('#board').appendChild(f); setTimeout(() => f.remove(), 1000);
 }
 function popTile(t) { t.el.classList.remove('active', 'stacked', 'rescue'); t.el.classList.add('pop'); setTimeout(() => t.el.remove(), 450); }
-function beep(ok) {
+function beep(ok, combo = 0) {
   try {
     const ac = beep.ac || (beep.ac = new (window.AudioContext || window.webkitAudioContext)());
     const o = ac.createOscillator(), g = ac.createGain(); o.connect(g); g.connect(ac.destination);
     o.type = ok ? 'triangle' : 'sawtooth'; const now = ac.currentTime;
-    if (ok) { o.frequency.setValueAtTime(660, now); o.frequency.setValueAtTime(990, now + 0.08); }
+    const up = Math.pow(2, Math.min(combo, 12) / 12);
+    if (ok) { o.frequency.setValueAtTime(660 * up, now); o.frequency.setValueAtTime(990 * up, now + 0.08); }
     else { o.frequency.setValueAtTime(200, now); o.frequency.linearRampToValueAtTime(110, now + 0.25); }
     g.gain.setValueAtTime(0.15, now); g.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
     o.start(now); o.stop(now + 0.3);
@@ -844,6 +921,17 @@ function beep(ok) {
 function pointsFor(sec, span) { // sec counts from the red line; span = time from the line to the stack
   if (sec <= 1) return MAX_PTS;
   return Math.max(60, Math.round(MAX_PTS - 40 * (sec - 1) / Math.max(0.5, span - 1)));
+}
+function showCombo() {
+  const c = $('#hudCombo'), n = G.streak;
+  c.classList.toggle('hidden', n < 3);
+  c.querySelector('b').textContent = 'x' + n;
+  c.classList.remove('bump'); void c.offsetWidth; c.classList.add('bump');
+  if (n >= 5 && n % 5 === 0) {
+    const big = document.createElement('div'); big.className = 'combo-big'; big.textContent = `${n} in a row!`;
+    $('#board').appendChild(big); setTimeout(() => big.remove(), 1300);
+    praise(n >= 15 ? 2 : n >= 10 ? 1 : 0, G.active?.item.lang);
+  }
 }
 function resolveWord() {
   G.active = null; G.resolved++; G.spawnDelay = 0.35; hud();
@@ -856,7 +944,7 @@ function correctActive(byMic) {
   let pts = pointsFor(sec, t.span); if (t.hinted) pts = Math.round(pts / 2);
   G.score += pts; G.streak++; G.read++; G.bestStreak = Math.max(G.bestStreak, G.streak); G.times.push(sec);
   floatText('+' + pts + (byMic ? ' 🎤' : ''), t.col * G.colW + 8, t.y);
-  popTile(t); beep(true); resolveWord();
+  popTile(t); beep(true, G.streak); showCombo(); resolveWord();
 }
 function land() {
   const t = G.active;
@@ -865,7 +953,7 @@ function land() {
   t.el.onclick = () => openRescue(t);
   G.stacks[t.col].push(t); placeTile(t);
   if (!G.missed.some((m) => m.text === t.item.text)) G.missed.push(t.item);
-  G.streak = 0; beep(false);
+  G.streak = 0; beep(false); showCombo();
   if (G.stacks[t.col].length >= G.rows) { G.active = null; levelEnd(); return; }
   resolveWord();
 }
@@ -922,7 +1010,7 @@ function startGame(listId, levelIdx) {
     stacks: Array.from({ length: G.cols }, () => []), active: null, queue: items, levelIdx, total: items.length, resolved: 0,
     score: 0, streak: 0, bestStreak: 0, read: 0, missed: [], times: [], fallSec: levelSec(levelIdx), colorIdx: 0, paused: false, spawnDelay: 0,
   });
-  hud();
+  hud(); showCombo();
   recog.onWords = onHeard;
   recog.setLang(srLang(items[0].lang));
   if (profile().mic === 'mic' && recog.supported) recog.start();
@@ -960,6 +1048,9 @@ function levelEnd() {
     ? (before < goal ? `Daily goal done! 🔥 ${streak()} day streak` : `Today: ${rec.passed} levels passed 🔥 ${streak()}`)
     : `Today: ${rec.passed}/${goal} levels passed`;
   $('#nextBtn').classList.toggle('hidden', !(passed && hasNext));
+  $('#finStars').innerHTML = passed ? starsHtml(pct) : '';
+  if (typeof funLevelEnd === 'function') funLevelEnd({ pct, passed, score: G.score, read: G.read, total: G.total, combo: G.bestStreak, fast: G.times.filter((x) => x <= 1).length, avg: G.times.length ? G.times.reduce((a, b) => a + b, 0) / G.times.length : 99, subject: G.list.subject });
+  praise(passed ? 3 : 4, G.list.subject === 'mix' ? 'th' : G.list.subject);
   const m = $('#finMissed'); m.innerHTML = '';
   $('#finMissedWrap').classList.toggle('hidden', !G.missed.length);
   for (const it of G.missed) {
@@ -991,7 +1082,6 @@ window.addEventListener('resize', () => {
 });
 
 // ---------- init ----------
-checkHashImport();
-renderHome();
+document.addEventListener('DOMContentLoaded', () => { checkHashImport(); renderHome(); });
 window.addEventListener('hashchange', () => { checkHashImport(); renderHome(); });
-window.__twd = { soundKey, thaiNum, say, recog, refs, bookGrade, bookList, addRef, guessGrade, G, splitText, encodeList, decodeList, onHeard, correctActive, levelItems, getList, numbersIn, parseExpr, matches, mathItem, streak, days, progress };
+window.__twd = { player, praise, soundKey, thaiNum, say, recog, refs, bookGrade, bookList, addRef, guessGrade, G, splitText, encodeList, decodeList, onHeard, correctActive, levelItems, getList, numbersIn, parseExpr, matches, mathItem, streak, days, progress };

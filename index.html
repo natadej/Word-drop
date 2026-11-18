@@ -16,22 +16,13 @@
 <!-- HOME -->
 <section id="home" class="screen active">
   <header class="topbar">
-    <div class="brand-sm">Word Drop <span class="th">อ่านให้ทัน!</span></div>
-    <button id="profileBtn" class="btn profile-btn">👤 <span id="profileName">Profile</span></button>
-  </header>
-
-  <div id="todayCard" class="panel today">
-    <div class="today-top">
-      <div>
-        <div class="k">Today</div>
-        <div id="todayText" class="today-text"></div>
-      </div>
-      <div class="streak"><span id="streakNum">0</span><small>day streak 🔥</small></div>
+    <button id="profileBtn" class="who"><span id="avatar" class="avatar">🐵</span><span id="profileName">Player</span></button>
+    <div class="pills">
+      <span class="pill fire" title="Day streak">🔥<b id="streakNum">0</b></span>
+      <span class="pill gem" title="Gems">💎<b id="gemNum">0</b></span>
+      <span class="pill xp" title="XP"><i id="tierIcon">🥉</i><b id="xpNum">0</b></span>
     </div>
-    <div class="goal-bar"><div id="goalBar"></div></div>
-    <div id="daysRow" class="days-row"></div>
-  </div>
-
+  </header>
   <nav id="subjectTabs" class="tabs">
     <button data-subject="th"><b>ไทย</b><small>Thai</small></button>
     <button data-subject="en"><b>ABC</b><small>English</small></button>
@@ -40,27 +31,75 @@
     <button data-subject="mix"><b>Mix</b><small>All</small></button>
   </nav>
 
-  <div id="listsPanel" class="panel">
-    <div class="panel-head">
-      <h2>Word lists</h2>
-      <button id="newListBtn" class="btn primary">+ New list</button>
+  <div id="tab-learn" class="tab">
+    <div id="questCard" class="panel quests">
+      <div class="quest-head">
+        <h3>Daily quests</h3>
+        <button id="chestBtn" class="chest" title="Finish all 3 quests to open">🎁</button>
+      </div>
+      <div id="questList" class="quest-list"></div>
     </div>
-    <ul id="listList" class="list-list"></ul>
-    <div id="refsBox" class="refs">
-      <h3>📚 Book photos</h3>
-      <p id="refsInfo" class="hint"></p>
-      <div id="refsStrip" class="refs-strip"></div>
-    </div>
+    <button id="listPicker" class="list-picker"><span><small>Playing</small><b id="levelsTitle">Levels</b></span><span class="chg">Change ›</span></button>
+    <div id="levels" class="path"></div>
   </div>
 
-  <div class="panel">
-    <h2 id="levelsTitle">Levels</h2>
-    <p class="hint">15 per level. Get 80% of the points to pass and unlock the next level.</p>
-    <div id="levels" class="levels"></div>
+  <div id="tab-lists" class="tab hidden">
+    <div id="listsPanel" class="panel">
+      <div class="panel-head">
+        <h2>Word lists</h2>
+        <button id="newListBtn" class="btn primary">+ New list</button>
+      </div>
+      <ul id="listList" class="list-list"></ul>
+      <div id="refsBox" class="refs">
+        <h3>📚 Book photos</h3>
+        <p id="refsInfo" class="hint"></p>
+        <div id="refsStrip" class="refs-strip"></div>
+      </div>
+    </div>
+    <p id="mixNote" class="hint center hidden">Mix uses words from all subjects. Pick a subject above to manage its lists.</p>
   </div>
 
-  <div class="panel settings">
-    <h2 id="settingsTitle">Settings</h2>
+  <div id="tab-ranks" class="tab hidden">
+    <div class="seg" id="boardSeg">
+      <button data-board="week" class="sel">This week</button>
+      <button data-board="all">All time</button>
+    </div>
+    <div id="rankJoin" class="panel join hidden">
+      <h3>Join the global leaderboard</h3>
+      <p class="hint">Other players see only a fun nickname and your avatar, never your real name.</p>
+      <div class="nick-row"><span id="joinAvatar" class="avatar big">🐵</span><b id="joinNick">Speedy Tiger</b><button id="nickRoll" class="btn small ghost" title="New name">🎲</button></div>
+      <button id="joinBtn" class="btn primary big">Join</button>
+    </div>
+    <div id="rankMe" class="panel rank-me hidden"></div>
+    <ol id="rankList" class="rank-list"></ol>
+    <p id="rankNote" class="hint center"></p>
+  </div>
+
+  <div id="tab-me" class="tab hidden">
+    <div class="panel me-card">
+      <span id="meAvatar" class="avatar huge">🐵</span>
+      <div class="me-info">
+        <b id="meName"></b>
+        <span id="meTier" class="tier"></span>
+        <div class="tier-bar"><div id="meTierBar"></div></div>
+        <small id="meTierNext" class="muted"></small>
+      </div>
+      <button id="meEdit" class="btn small ghost">✎</button>
+    </div>
+    <div class="panel stats-grid" id="meStats"></div>
+    <div id="todayCard" class="panel today">
+      <div class="today-top">
+        <div><div class="k">Today</div><div id="todayText" class="today-text"></div></div>
+        <div class="freeze" id="freezeInfo" title="Streak freezes"></div>
+      </div>
+      <div class="goal-bar"><div id="goalBar"></div></div>
+      <div id="daysRow" class="days-row"></div>
+    </div>
+    <div class="panel"><h3>🏆 Trophies <span id="trophyCount" class="muted"></span></h3><div id="trophies" class="trophies"></div></div>
+    <div class="panel"><h3>🛍️ Shop <span class="muted">· spend 💎 gems</span></h3><div id="shop" class="shop"></div></div>
+    <details class="panel settings-box">
+      <summary>⚙️ Settings</summary>
+      <div class="settings">
     <label>Time to read each word (Level 1)
       <select id="setSpeed">
         <option value="6">6 seconds</option>
@@ -102,9 +141,17 @@
       <input id="setGemini" type="password" autocomplete="off" placeholder="Paste key from aistudio.google.com">
     </label>
     <p id="micSupport" class="hint"></p>
+      </div>
+    </details>
   </div>
-</section>
 
+  <nav class="bottom-nav" id="bottomNav">
+    <button data-tab="learn" class="sel"><i>🏠</i><small>Learn</small></button>
+    <button data-tab="lists"><i>📚</i><small>Lists</small></button>
+    <button data-tab="ranks"><i>🏆</i><small>Ranks</small></button>
+    <button data-tab="me"><i>😊</i><small>Me</small></button>
+  </nav>
+</section>
 <!-- EDITOR -->
 <section id="editor" class="screen">
   <header class="bar">
@@ -206,6 +253,7 @@
     <div class="stat"><span class="k">Score</span><span id="hudScore" class="v">0</span></div>
     <div class="stat"><span class="k">Pass at</span><span id="hudPass" class="v">1200</span></div>
   </div>
+  <div id="hudCombo" class="combo hidden">🔥 <b>x0</b></div>
   <div class="game-body">
     <div id="board" class="board">
       <div id="dangerLine" class="danger-line"></div>
@@ -249,6 +297,8 @@
         <div><span class="k">Avg. time</span><span id="finAvg" class="v"></span></div>
         <div><span class="k">Best streak</span><span id="finStreak" class="v"></span></div>
       </div>
+      <div id="finStars" class="stars"></div>
+      <div id="finRewards" class="rewards"></div>
       <p id="finBest" class="best"></p>
       <p id="finDaily" class="daily-msg"></p>
       <div id="finMissedWrap">
@@ -301,11 +351,35 @@
   </div>
 </div>
 
+<!-- CELEBRATION -->
+<div id="celebrate" class="overlay celebrate hidden">
+  <div class="confetti" id="confetti"></div>
+  <div class="dialog cele">
+    <div id="celeIcon" class="cele-icon">🏆</div>
+    <h2 id="celeTitle"></h2>
+    <p id="celeText"></p>
+    <button id="celeOk" class="btn primary big">Yay!</button>
+  </div>
+</div>
+<!-- SHARE -->
+<div id="shareOverlay" class="overlay hidden">
+  <div class="dialog">
+    <img id="shareImg" class="share-img" alt="Trophy card">
+    <div class="row center">
+      <button id="shareGo" class="btn primary">📤 Share</button>
+      <a id="shareSave" class="btn" download="word-drop.png">⬇️ Save</a>
+      <button id="shareClose" class="btn ghost">Close</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="toast hidden"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" defer></script>
 <script src="openthai.js" defer></script>
 <script src="banks.js" defer></script>
 <script src="app.js" defer></script>
+<script src="fun.js" defer></script>
+<script src="ranks.js" defer></script>
 </body>
 </html>

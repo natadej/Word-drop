@@ -32,3 +32,19 @@ Every photo you read is kept per child and subject as a reference: a small thumb
 - Photos are shown under the word lists; tap one to view or delete it.
 
 Lists can be shared with the 🔗 button (the list is encoded in the link).
+
+## Screens
+Bottom tabs: **Learn** (daily quests and a path of levels with 1–3 stars), **Lists** (word lists and book photos), **Ranks** (leaderboard) and **Me** (rank, stats, trophies, shop, settings).
+
+## Keep-playing features (`fun.js`)
+- **XP and ranks:** score/10 per level, +20 for passing, +10 for 100%. Ranks: Bronze, Silver (300), Gold (1,000), Ruby (2,500), Emerald (5,000), Diamond (10,000), Champion (20,000).
+- **Daily quests:** 3 a day (read N words, N in a row, earn XP, collect stars...). Finishing all 3 opens a treasure chest of gems.
+- **Trophies:** 14 badges (first win, 100 words, 7-day streak, perfect level, speed reader...), +20 gems each.
+- **Gems and shop:** avatars, tile colour themes and streak freezes (a freeze keeps the streak when a day is missed, up to 2).
+- **Combos:** a counter, rising beeps and a voice cheer at 5, 10, 15 in a row.
+
+## Voices
+Built-in words and the cheers are pre-recorded with natural neural voices (`audio/`, made by `tools/make_voices.py` with [edge-tts](https://github.com/rany2/edge-tts)). Other words use Gemini's voice when a key is set (cached in the browser after the first time), otherwise the device's text-to-speech.
+
+## Global leaderboard (`ranks.js`)
+Firebase Firestore over REST with anonymous sign-in; set `FIREBASE_CONFIG` in `ranks.js` (the web config is public by design) and publish `firestore.rules`. Players join with a generated nickname (no real names) and avatar; weekly league (resets Monday) and all-time top 100; a trophy card can be shared as a picture.
