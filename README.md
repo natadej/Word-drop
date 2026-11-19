@@ -47,4 +47,5 @@ Bottom tabs: **Learn** (daily quests and a path of levels with 1–3 stars), **L
 Built-in words and the cheers are pre-recorded with natural neural voices (`audio/`, made by `tools/make_voices.py` with [edge-tts](https://github.com/rany2/edge-tts)). Other words use Gemini's voice when a key is set (cached in the browser after the first time), otherwise the device's text-to-speech.
 
 ## Global leaderboard (`ranks.js`)
-Firebase Firestore over REST with anonymous sign-in; set `FIREBASE_CONFIG` in `ranks.js` (the web config is public by design) and publish `firestore.rules`. Players join with a generated nickname (no real names) and avatar; weekly league (resets Monday) and all-time top 100; a trophy card can be shared as a picture.
+Supabase (free tier). The browser only calls three Postgres functions (`supabase/leaderboard.sql`): `wd_submit` (each player has a random id and secret; XP can't jump more than 3,000 per update), `wd_board` (weekly or all-time top 100) and `wd_leave`. The `wd_players` table itself is closed to the browser (RLS, no policies). The URL and publishable key in `ranks.js` are public by design.
+Players join with a generated nickname (no real names) and their avatar; the weekly league resets every Monday; a trophy card can be shared as a picture.
