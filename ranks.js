@@ -2,7 +2,7 @@
 // Global leaderboard on Firebase (Firestore REST + anonymous sign-in). The web config is public by design;
 // the Firestore security rules (firestore.rules) protect the data.
 const FIREBASE_CONFIG = null;
-const FB = FIREBASE_CONFIG;
+const FB = FIREBASE_CONFIG || (() => { try { const c = JSON.parse(localStorage.getItem('twd.cloud.v1')); return c?.apiKey && !c.emulator ? c : null; } catch { return null; } })();
 const NICK_A = ['Speedy', 'Happy', 'Brave', 'Lucky', 'Clever', 'Super', 'Mighty', 'Sunny', 'Jolly', 'Rocket', 'Ninja', 'Magic', 'Turbo', 'Cosmic'];
 const NICK_B = ['Tiger', 'Panda', 'Eagle', 'Dragon', 'Koala', 'Otter', 'Falcon', 'Puffin', 'Lion', 'Fox', 'Owl', 'Shark', 'Gecko', 'Mango'];
 const rollNick = () => `${NICK_A[rand(0, NICK_A.length - 1)]} ${NICK_B[rand(0, NICK_B.length - 1)]} ${rand(1, 99)}`;

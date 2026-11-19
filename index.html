@@ -18,6 +18,7 @@
   <header class="topbar">
     <button id="profileBtn" class="who"><span id="avatar" class="avatar">🐵</span><span id="profileName">Player</span></button>
     <div class="pills">
+      <button id="cloudBtn" class="pill cloud-pill" title="Sync">☁️?</button>
       <span class="pill fire" title="Day streak">🔥<b id="streakNum">0</b></span>
       <span class="pill gem" title="Gems">💎<b id="gemNum">0</b></span>
       <span class="pill xp" title="XP"><i id="tierIcon">🥉</i><b id="xpNum">0</b></span>
@@ -137,12 +138,33 @@
         <option value="parent">Parent button only</option>
       </select>
     </label>
+    <label>Listen &amp; repeat before playing
+      <select id="setWarmup">
+        <option value="on">On (says new words and spells them)</option>
+        <option value="off">Off</option>
+      </select>
+    </label>
     <label class="full-col">Gemini API key <span class="muted">(optional: accurate photo reading and AI word lists)</span>
       <input id="setGemini" type="password" autocomplete="off" placeholder="Paste key from aistudio.google.com">
     </label>
     <p id="micSupport" class="hint"></p>
       </div>
     </details>
+    <div id="cloudBox" class="panel cloud">
+      <div class="cloud-head"><b>☁️ Sync with Google</b> <span id="cloudStatus" class="muted"></span></div>
+      <p class="hint">Sign in with the same Google account on every phone or tablet: book photos, lists, progress and learned words follow you.</p>
+      <div class="row">
+        <button id="cloudSignIn" class="btn primary">Sign in with Google</button>
+        <button id="cloudLink" class="btn hidden">📲 Set up another device</button>
+        <button id="cloudSignOut" class="btn ghost hidden">Sign out</button>
+      </div>
+      <details id="cloudSetup">
+        <summary>One-time setup (parent)</summary>
+        <p class="hint">Create a free Firebase project, turn on Google sign-in and Firestore, then paste its web app <code>firebaseConfig</code> here. It stays on this device; use “Set up another device” to copy it to the others.</p>
+        <textarea id="cloudConfig" rows="4" placeholder="const firebaseConfig = { apiKey: &quot;…&quot;, authDomain: &quot;…&quot;, projectId: &quot;…&quot;, appId: &quot;…&quot; };"></textarea>
+        <button id="cloudSave" class="btn small">Save setup</button>
+      </details>
+    </div>
   </div>
 
   <nav class="bottom-nav" id="bottomNav">
@@ -277,6 +299,26 @@
     </div>
   </div>
 
+  <div id="warmOverlay" class="overlay hidden">
+    <div class="dialog warm">
+      <div class="warm-top">
+        <span id="warmCount" class="muted"></span>
+        <b>👂 Listen, then say it · ฟังแล้วพูดตาม</b>
+        <button id="warmQuit" class="btn small ghost" title="Back to menu">✕</button>
+      </div>
+      <div id="warmWord" class="warm-word"></div>
+      <div id="warmParts" class="warm-parts"></div>
+      <p id="warmNote" class="hint"></p>
+      <p id="warmHeard" class="heard"></p>
+      <div class="row center">
+        <button id="warmSay" class="btn">🔊 Again</button>
+        <button id="warmSpell" class="btn">🔤 Spell it</button>
+        <button id="warmOk" class="btn ok">✓ Said it</button>
+      </div>
+      <button id="warmSkip" class="btn primary big">⏭ Skip, play now</button>
+    </div>
+  </div>
+
   <div id="rescuePop" class="rescue-pop hidden">
     <div id="rescueWord" class="rescue-word"></div>
     <div class="row">
@@ -301,6 +343,7 @@
       <div id="finRewards" class="rewards"></div>
       <p id="finBest" class="best"></p>
       <p id="finDaily" class="daily-msg"></p>
+      <p id="finLearn" class="hint learn-msg"></p>
       <div id="finMissedWrap">
         <h3>To practise</h3>
         <div id="finMissed" class="chips"></div>
@@ -378,6 +421,7 @@
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" defer></script>
 <script src="openthai.js" defer></script>
 <script src="banks.js" defer></script>
+<script src="thai.js" defer></script>
 <script src="app.js" defer></script>
 <script src="fun.js" defer></script>
 <script src="ranks.js" defer></script>

@@ -3,7 +3,7 @@ const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 
 // ---------- constants ----------
-const K = { lists: 'twd.lists.v1', settings: 'twd.settings.v1', progress: 'twd.progress.v2', profiles: 'twd.profiles.v1', days: 'twd.days.v1', refs: 'twd.refs.v1' };
+const K = { lists: 'twd.lists.v1', settings: 'twd.settings.v1', progress: 'twd.progress.v2', profiles: 'twd.profiles.v1', days: 'twd.days.v1', refs: 'twd.refs.v1', mastery: 'twd.mastery.v1', cloud: 'twd.cloud.v1' };
 const LEVEL_SIZE = 15, PASS_PCT = 80, MAX_PTS = 100;
 const SUBJECTS = { th: 'Thai', en: 'English', zh: 'Chinese', math: 'Math', mix: 'Mix' };
 const LANG_NAME = { th: 'Thai', en: 'English', zh: 'Simplified Chinese' };
@@ -14,7 +14,8 @@ const TILE_COLORS = ['#ff6b6b','#ffa94d','#ffd43b','#69db7c','#38d9a9','#4dabf7'
 
 // ---------- storage ----------
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
-const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
+let Cloud = null, cloudQuiet = false;
+const save = (k, v) => { localStorage.setItem(k, JSON.stringify(v)); cloudDirty(k); };
 let lists = load(K.lists, []).map((l) => ({ subject: 'th', ...l }));
 let settings = Object.assign({ subject: 'th', listId: {} }, load(K.settings, {}));
 if (typeof settings.listId !== 'object' || !settings.listId) settings.listId = {};
@@ -22,6 +23,7 @@ let profiles = load(K.profiles, []);
 let progress = load(K.progress, {});
 let days = load(K.days, {});
 let refs = load(K.refs, {});
+let mastery = load(K.mastery, {});
 const oldProgress = load('twd.progress.v1', null);
 const saveAll = () => { save(K.lists, lists); save(K.settings, settings); save(K.profiles, profiles); save(K.progress, progress); save(K.days, days); };
 
@@ -58,7 +60,7 @@ function guessGrade(items, subject) {
 }
 function saveRefs() {
   for (;;) {
-    try { localStorage.setItem(K.refs, JSON.stringify(refs)); return; } catch (e) {
+    try { localStorage.setItem(K.refs, JSON.stringify(refs)); cloudDirty(K.refs); return; } catch (e) {
       const withThumb = Object.values(refs).flat().filter((r) => r.thumb).sort((a, b) => a.id.localeCompare(b.id));
       if (!withThumb.length) throw e;
       withThumb[0].thumb = null;
@@ -72,19 +74,111 @@ function thumbOf(canvas) {
   c.getContext('2d').drawImage(canvas, 0, 0, c.width, c.height);
   return c.toDataURL('image/jpeg', 0.6);
 }
+function photoOf(canvas) {
+  const k = Math.min(1, 1400 / Math.max(canvas.width, canvas.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(canvas.width * k); c.height = Math.round(canvas.height * k);
+  c.getContext('2d').drawImage(canvas, 0, 0, c.width, c.height);
+  let q = 0.75, url = c.toDataURL('image/jpeg', q);
+  while (url.length > 900000 && q > 0.3) url = c.toDataURL('image/jpeg', (q -= 0.1));
+  return url;
+}
+const idb = (() => {
+  let dbp;
+  const db = () => (dbp ||= new Promise((res, rej) => {
+    const r = indexedDB.open('twd', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('photos');
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  }));
+  const tx = async (mode, f) => {
+    const d = await db();
+    return new Promise((res, rej) => { const t = d.transaction('photos', mode), q = f(t.objectStore('photos')); t.oncomplete = () => res(q.result); t.onerror = () => rej(t.error); });
+  };
+  return { get: (k) => tx('readonly', (st) => st.get(k)).catch(() => null), put: (k, v) => tx('readwrite', (st) => st.put(v, k)).catch(() => {}), del: (k) => tx('readwrite', (st) => st.delete(k)).catch(() => {}) };
+})();
+async function refPhoto(r) {
+  let url = await idb.get(r.id);
+  if (!url && Cloud) { url = await Cloud.getPhoto(r.id).catch(() => null); if (url) idb.put(r.id, url); }
+  return url || r.thumb;
+}
+function deleteRefs(ids) {
+  const del = new Set(ids);
+  for (const pid of Object.keys(refs)) refs[pid] = refs[pid].filter((r) => !del.has(r.id));
+  ids.forEach((id) => idb.del(id));
+  saveRefs();
+}
+function deleteList(l) {
+  lists = lists.filter((x) => x.id !== l.id);
+  if (settings.listId[l.subject] === l.id) delete settings.listId[l.subject];
+  for (const p of Object.values(progress)) delete p[l.id];
+  saveAll();
+}
 function addRef(subject, canvas, items, more, grade) {
   if (!items.length && !more.length) return null;
   const g = grade !== null && grade !== '' && Number.isFinite(+grade) ? Math.max(0, Math.min(12, Math.round(+grade))) : guessGrade(items, subject);
   const r = { id: 'r' + Date.now(), date: today(), subject, thumb: thumbOf(canvas), items, more, grade: g };
   (refs[profile().id] ||= []).push(r);
   edit.refIds.push(r.id);
+  idb.put(r.id, photoOf(canvas)).then(cloudPhotos);
   saveRefs();
   return r;
 }
 function bookList(subject) {
   const words = [...new Set(myRefs(subject).flatMap((r) => [...r.items, ...(r.more || [])]))];
   if (!words.length) return null;
-  return { id: `book-${subject}`, builtin: true, book: true, subject, name: `📚 From ${profile().name}'s books`, words };
+  return { id: `book-${subject}`, builtin: true, book: true, smart: true, subject, name: `📚 From ${profile().name}'s books`, words };
+}
+
+// ---------- mastery: each word is learned after KNOWN good rounds; the reading level follows what he can read ----------
+const KNOWN = 3, MAX_SKILL = 7;
+const myM = () => (mastery[profile().id] ||= { skill: {}, words: {} });
+const mKey = (lang, w) => lang + ':' + w;
+const wordRec = (lang, w) => myM().words[mKey(lang, w)];
+const isKnown = (lang, w) => (wordRec(lang, w)?.b ?? 0) >= KNOWN;
+const startSkill = (s) => { const g = bookGrade(s); return g ?? Math.max(0, Math.min(5, profile().age - 6)); };
+const skillOf = (s) => myM().skill[s] ?? startSkill(s);
+const skillName = (s) => { const v = skillOf(s); return `${gradeName(Math.round(v))} (${v.toFixed(1)})`; };
+function wordPool(subject) { // [{w, d}], d = difficulty on a grade scale
+  const out = new Map(), add = (w, d) => { if (w && !out.has(w)) out.set(w, d); };
+  for (const r of myRefs(subject)) [...r.items, ...(r.more || [])].forEach((w) => add(w, r.grade ?? 1));
+  if (subject === 'th' && typeof TH !== 'undefined') for (const l of TH.LESSONS) if (!l.letters) l.words.forEach((w) => add(w, l.d));
+  const base = { '4-6': 0, '7-9': 2, '10-12': 4 };
+  for (const [b, ws] of Object.entries(BANKS[subject] || {})) ws.forEach((w, i) => add(w, base[b] + 2 * i / ws.length));
+  return [...out].map(([w, d]) => ({ w, d }));
+}
+function smartWords(subject, pool, n) {
+  const S = skillOf(subject), rec = (x) => wordRec(subject, x.w), jit = () => Math.random() * 0.6;
+  const learning = pool.filter((x) => rec(x) && rec(x).b < KNOWN), fresh = pool.filter((x) => !rec(x)), known = pool.filter((x) => rec(x)?.b >= KNOWN);
+  const out = [], take = (arr, k) => { for (const x of arr) { if (out.length >= n || k <= 0) break; if (!out.includes(x)) { out.push(x); k--; } } };
+  const by = (f) => (a, b) => f(a) - f(b);
+  take([...learning].sort(by((x) => rec(x).b - (rec(x).f || 0) * 0.5 + jit())), Math.round(n * 0.4)); // words he is still learning come back
+  take(shuffle(fresh.filter((x) => x.d > S + 0.5 && x.d <= S + 2)), 2); // a couple of stretch words
+  take([...known].sort(by((x) => rec(x).t)), 1); // one old word to check he still remembers it
+  take([...fresh, ...learning].sort(by((x) => Math.abs(x.d - S) + jit())), n); // new words at his level
+  take([...known].sort(by((x) => rec(x).t + Math.random() * 864e5)), n);
+  return shuffle(out.map((x) => x.w));
+}
+function learn(results) { // results: Map lang:word → 1 read, 0.5 hint/late, 0 missed
+  const m = myM(), now = Date.now(), learned = [], before = {}, pools = {};
+  for (const [k, r] of results) {
+    const i = k.indexOf(':'), lang = k.slice(0, i), w = k.slice(i + 1);
+    const x = (m.words[k] ||= { b: 0, n: 0, f: 0, t: 0 }), was = x.b >= KNOWN;
+    x.n++; x.t = now;
+    if (r === 1) x.b = Math.min(6, x.b + 1); else if (r === 0) { x.b = 0; x.f++; } else x.b = Math.min(x.b, 1);
+    if (!was && x.b >= KNOWN) learned.push(w);
+    const pool = (pools[lang] ||= wordPool(lang));
+    const d = pool.find((p) => p.w === w)?.d ?? guessGrade([w], lang) ?? skillOf(lang);
+    const cur = m.skill[lang] ?? (before[lang] ??= skillOf(lang));
+    before[lang] ??= cur;
+    const expect = 1 / (1 + Math.exp(-1.6 * (cur - d + 0.7)));
+    m.skill[lang] = Math.max(0, Math.min(MAX_SKILL, cur + 0.1 * (r - expect)));
+  }
+  for (const lang of Object.keys(before)) { // move up once most words at his level are known
+    const S = m.skill[lang], near = pools[lang].filter((p) => p.d <= S + 0.3);
+    if (near.length >= 8 && near.filter((p) => (m.words[mKey(lang, p.w)]?.b ?? 0) >= KNOWN).length >= near.length * 0.8) m.skill[lang] = Math.min(MAX_SKILL, S + 0.25);
+  }
+  save(K.mastery, mastery);
+  return { learned, change: Object.keys(before).map((l) => [l, before[l], m.skill[l]]) };
 }
 
 // ---------- utils ----------
@@ -162,7 +256,8 @@ function numbersIn(s) {
 // ---------- items ----------
 function itemFor(text, lang) {
   if (lang === 'math') { const e = parseExpr(text); return e ? { text: e.text + ' = ?', lang, answer: e.answer, plain: e.text } : null; }
-  return { text, lang };
+  const t = lang === 'th' && typeof TH !== 'undefined' && TH.letterKind(text) ? { say: TH.sayFor(text) || undefined, ...TH.accept(text) } : {};
+  return { text, lang, ...t };
 }
 function thaiNum(n) {
   if (!n || n >= 1e7) return n ? String(n) : 'ศูนย์';
@@ -196,13 +291,15 @@ function matches(item, alts) {
       return !w.includes(' ') && s.split(' ').some((x) => x === w + 's' || x === w + 'es' || (w.length >= 5 && Math.abs(x.length - w.length) <= 1 && fuzzyIn(w, x, 1)));
     });
   }
+  if (item.alt && item.alt.some((x) => alts.some((a) => soundKey(a).includes(soundKey(x))))) return true;
+  if (item.strict) return false;
   const w = normalize(item.text);
   if (alts.some((a) => normalize(a).includes(w))) return true;
   if (item.lang !== 'th') return false;
   const key = soundKey(item.text), k = key.length >= 8 ? 2 : key.length >= 4 ? 1 : 0;
   return !!key && alts.some((a) => fuzzyIn(key, soundKey(a), k));
 }
-const sayText = (item) => (item.lang === 'math' ? String(item.answer) : item.text);
+const sayText = (item) => (item.lang === 'math' ? String(item.answer) : item.say || item.text);
 
 // ---------- speech synthesis ----------
 // Natural voices: pre-recorded files for built-in words (audio/index.json), Gemini voice for other words when a key is set
@@ -299,11 +396,12 @@ function builtinList(subject) {
   const lv = g == null ? `Age ${b}` : `${gradeName(g)} level`;
   if (subject === 'math') return { id: `b-math-${b}`, builtin: true, subject, name: `${lv} math`, gen: 'math', count: 8 };
   if (subject === 'mix') return { id: `b-mix-${b}`, builtin: true, subject, name: `Mix: Thai, English, 中文, Math`, gen: 'mix', count: 4 };
-  return { id: `b-${subject}-${b}`, builtin: true, subject, name: `${lv} words`, words: BANKS[subject][b] };
+  return { id: `smart-${subject}`, builtin: true, smart: true, subject, name: `🎯 Smart practice · ${skillName(subject)}`, gen: 'smart', count: 10 };
 }
+const phonicsList = () => ({ id: 'phonics-th', builtin: true, phonics: true, subject: 'th', name: '🔤 Phonics: สระ · แม่ ก กา · ตัวสะกด · วรรณยุกต์', count: TH.LESSONS.length });
 const subjectLists = (subject) => (subject === 'mix' ? [builtinList(subject)]
-  : [bookList(subject), builtinList(subject), ...lists.filter((l) => l.subject === subject)].filter(Boolean));
-const getList = (id) => [...['th', 'en', 'zh', 'math'].map(bookList), ...['th', 'en', 'zh', 'math', 'mix'].map(builtinList)].find((l) => l && l.id === id)
+  : [bookList(subject), builtinList(subject), subject === 'th' && phonicsList(), ...lists.filter((l) => l.subject === subject)].filter(Boolean));
+const getList = (id) => [...['th', 'en', 'zh', 'math'].map(bookList), ...['th', 'en', 'zh', 'math', 'mix'].map(builtinList), phonicsList()].find((l) => l && l.id === id)
   || lists.find((l) => l.id === id);
 const currentList = () => {
   const s = settings.subject;
@@ -323,12 +421,22 @@ function levelItems(list, i) {
   }
   if (list.gen === 'mix') {
     const pickN = (arr, n) => shuffle([...arr]).slice(0, n);
-    const pool = (s) => { const bk = bookList(s); return [...new Set([...(bk ? bk.words.slice(-45) : []), ...BANKS[s][diffBand(s)]])]; };
     const items = [
-      ...['th', 'en', 'zh'].flatMap((s) => pickN(bookList(s) ? pool(s).slice(0, 45) : pool(s), 4).map((w) => itemFor(w, s))),
+      ...['th', 'en', 'zh'].flatMap((s) => smartWords(s, wordPool(s), 4).map((w) => itemFor(w, s))),
       ...[...new Set(Array.from({ length: 12 }, () => mathItem(diffBand('math'), i + 1 + mathOffset())))].slice(0, 3).map((e) => itemFor(e, 'math')),
     ];
     return noAdjDup(items);
+  }
+  if (list.phonics) {
+    const ws = TH.LESSONS[i].words, words = [...ws];
+    while (words.length < Math.min(LEVEL_SIZE, ws.length * 2)) words.push(ws[words.length % ws.length]);
+    return noAdjDup(words.map((w) => itemFor(w, 'th')));
+  }
+  if (list.smart) {
+    const pool = list.words ? wordPool(list.subject).filter((x) => list.words.includes(x.w)) : wordPool(list.subject);
+    const words = smartWords(list.subject, pool, LEVEL_SIZE);
+    while (words.length && words.length < LEVEL_SIZE) words.push(words[words.length % pool.length]);
+    return noAdjDup(words.map((w) => itemFor(w, list.subject)).filter(Boolean));
   }
   const all = list.words;
   const words = all.slice(i * LEVEL_SIZE, (i + 1) * LEVEL_SIZE);
@@ -429,22 +537,38 @@ function renderHome() {
     li.innerHTML = `<div class="name"><b>${escapeHtml(l.name)}</b><small class="${s}">${l.words ? l.words.length + ' · ' : ''}${escapeHtml(preview)}</small></div>
       <span class="best">${passedN}/${n} ✓</span>
       <button class="btn small" data-act="play">▶</button>
-      ${l.builtin ? '' : '<button class="btn small ghost" data-act="edit">✎</button><button class="btn small ghost" data-act="share" title="Share link">🔗</button>'}`;
+      ${l.book ? '<button class="btn small ghost" data-act="delbook" title="Delete whole book">🗑</button>' : ''}
+      ${l.builtin ? '' : '<button class="btn small ghost" data-act="edit">✎</button><button class="btn small ghost" data-act="share" title="Share link">🔗</button><button class="btn small ghost" data-act="del" title="Delete">🗑</button>'}`;
     li.querySelector('.name').onclick = () => { settings.listId[s] = l.id; saveAll(); showTab('learn'); };
     li.querySelector('[data-act=play]').onclick = () => { settings.listId[s] = l.id; saveAll(); startGame(l.id); };
     const e = li.querySelector('[data-act=edit]'); if (e) e.onclick = () => openEditor(l);
     const sh = li.querySelector('[data-act=share]'); if (sh) sh.onclick = () => shareList(l);
+    const del = li.querySelector('[data-act=del]'); if (del) del.onclick = () => askDeleteList(l);
+    const db = li.querySelector('[data-act=delbook]');
+    if (db) db.onclick = () => {
+      const rs = myRefs(s);
+      if (!confirm(`Delete the whole ${SUBJECTS[s]} book: all ${rs.length} photo${rs.length > 1 ? 's' : ''} and their words? Saved lists stay.`)) return;
+      deleteRefs(rs.map((r) => r.id)); renderHome(); toast('Book deleted');
+    };
     ul.appendChild(li);
   }
   if (s !== 'mix') renderRefs(s);
   renderLevels();
   if (typeof renderFun === 'function') renderFun();
   $('#setSpeed').value = p.speed; $('#setGoal').value = p.goal; $('#setMathLang').value = p.mathLang;
-  $('#setOrder').value = p.order; $('#setMic').value = p.mic;
+  $('#setOrder').value = p.order; $('#setMic').value = p.mic; $('#setWarmup').value = p.warmup || 'on';
+  renderCloud();
   $('#setGemini').value = settings.gemini || '';
   $('#micSupport').textContent = recog.supported
     ? 'The microphone listens in Thai, English or Chinese to match each word (works best in Chrome). The parent button always works too.'
     : 'This browser has no speech recognition. Use the “He read it!” button (Chrome on Android supports the mic).';
+}
+function askDeleteList(l, after) {
+  if (!confirm(`Delete “${l.name}”?`)) return false;
+  const rs = myRefs().filter((r) => (l.refIds || []).includes(r.id));
+  if (rs.length && confirm(`Also delete the ${rs.length} book photo${rs.length > 1 ? 's' : ''} this page came from?`)) deleteRefs(rs.map((r) => r.id));
+  deleteList(l); (after || renderHome)(); toast('Deleted');
+  return true;
 }
 function renderRefs(s) {
   const rs = myRefs(s), g = bookGrade(s), p = profile();
@@ -465,6 +589,7 @@ function openRef(r) {
   refOpen = r;
   $('#refTitle').textContent = `${SUBJECTS[r.subject]} book photo · ${r.date}`;
   $('#refImg').src = r.thumb || ''; $('#refImg').classList.toggle('hidden', !r.thumb);
+  refPhoto(r).then((url) => { if (refOpen === r && url) { $('#refImg').src = url; $('#refImg').classList.remove('hidden'); } });
   $('#refInfo').textContent = `${gradeName(r.grade)} level · ${r.items.length} from the photo${r.more?.length ? ` + ${r.more.length} similar` : ''}`;
   const c = $('#refItems'); c.innerHTML = '';
   for (const w of r.items) { const b = document.createElement('span'); b.className = 'chip ' + r.subject; b.textContent = w; c.appendChild(b); }
@@ -473,8 +598,9 @@ function openRef(r) {
 $('#refClose').onclick = () => $('#refOverlay').classList.add('hidden');
 $('#refDelete').onclick = () => {
   if (!refOpen || !confirm('Delete this photo and its words from the book list?')) return;
-  refs[profile().id] = myRefs().filter((r) => r !== refOpen);
-  saveRefs(); $('#refOverlay').classList.add('hidden'); renderHome();
+  const ls = lists.filter((l) => (l.refIds || []).includes(refOpen.id));
+  if (ls.length && confirm(`Also delete the list “${ls.map((l) => l.name).join('”, “')}” made from it?`)) ls.forEach(deleteList);
+  deleteRefs([refOpen.id]); $('#refOverlay').classList.add('hidden'); renderHome();
 };
 function renderLevels() {
   const list = currentList();
@@ -487,7 +613,10 @@ function renderLevels() {
     const b = document.createElement('button');
     b.className = 'level-card node' + (unlocked ? '' : ' locked') + (passed ? ' passed' : '') + (cur ? ' current' : '');
     b.style.setProperty('--x', SWAY[i % SWAY.length]);
-    const preview = list.words ? list.words.slice(i * LEVEL_SIZE, i * LEVEL_SIZE + 3).join(' ')
+    const preview = list.phonics ? TH.LESSONS[i].title
+      : list.gen === 'smart' ? `${SUBJECTS[list.subject]} words picked for ${profile().name}`
+      : list.words && list.smart ? 'Book words picked for his level'
+      : list.words ? list.words.slice(i * LEVEL_SIZE, i * LEVEL_SIZE + 3).join(' ')
       : list.gen === 'math' ? mathItem(diffBand('math'), i + mathOffset()) : 'ไทย · ABC · 中文 · 1+2';
     b.innerHTML = `${cur ? '<span class="start">START</span>' : ''}
       <span class="bubble">${unlocked ? (passed ? '★' : i + 1) : '🔒'}</span>
@@ -514,7 +643,7 @@ $$('#bottomNav button').forEach((b) => (b.onclick = () => showTab(b.dataset.tab)
 $('#listPicker').onclick = () => showTab('lists');
 const bindProfileSetting = (id, key) => ($('#' + id).onchange = (e) => { profile()[key] = e.target.value; saveAll(); renderHome(); });
 bindProfileSetting('setSpeed', 'speed'); bindProfileSetting('setGoal', 'goal'); bindProfileSetting('setMathLang', 'mathLang');
-bindProfileSetting('setOrder', 'order'); bindProfileSetting('setMic', 'mic');
+bindProfileSetting('setOrder', 'order'); bindProfileSetting('setMic', 'mic'); bindProfileSetting('setWarmup', 'warmup');
 $('#setGemini').onchange = (e) => { settings.gemini = e.target.value.trim(); saveAll(); };
 $('#newListBtn').onclick = () => openEditor(null);
 $$('[data-go]').forEach((b) => (b.onclick = () => { show(b.dataset.go); renderHome(); }));
@@ -635,19 +764,14 @@ $('#saveListBtn').onclick = () => {
   if (!edit.words.length) { toast('Add some words first'); return; }
   const subject = edSubject();
   const name = $('#listName').value.trim() || `${edit.refIds.length ? `${SUBJECTS[subject]} book page` : SUBJECTS[subject]} ${new Date().toLocaleDateString()}`;
-  if (edit.list) Object.assign(lists.find((l) => l.id === edit.list.id), { name, words: edit.words, subject });
-  else { const nl = { id: 'l' + Date.now(), name, words: edit.words, subject }; lists.push(nl); settings.listId[subject] = nl.id; }
+  if (edit.list) { const l = lists.find((x) => x.id === edit.list.id); Object.assign(l, { name, words: edit.words, subject, refIds: [...new Set([...(l.refIds || []), ...edit.refIds])] }); }
+  else { const nl = { id: 'l' + Date.now(), name, words: edit.words, subject, refIds: edit.refIds }; lists.push(nl); settings.listId[subject] = nl.id; }
   const keep = new Set(edit.words);
   for (const r of myRefs()) if (edit.refIds.includes(r.id)) { r.items = r.items.filter((w) => keep.has(w)); r.more = (r.more || []).filter((w) => keep.has(w)); }
   saveRefs();
   settings.subject = subject; saveAll(); show('home'); renderHome(); toast('Saved');
 };
-$('#deleteListBtn').onclick = () => {
-  if (!confirm('Delete this list?')) return;
-  lists = lists.filter((l) => l.id !== edit.list.id);
-  if (settings.listId[edit.list.subject] === edit.list.id) delete settings.listId[edit.list.subject];
-  saveAll(); show('home'); renderHome();
-};
+$('#deleteListBtn').onclick = () => askDeleteList(lists.find((l) => l.id === edit.list.id), () => { show('home'); renderHome(); });
 $('#pasteBtn').onclick = async () => {
   try {
     const t = await navigator.clipboard.readText();
@@ -942,6 +1066,7 @@ function correctActive(byMic) {
   if (!t || !G.running || G.paused) return;
   const sec = t.lineAt == null ? 0 : (performance.now() - t.lineAt - (t.pausedMs - t.pausedAtLine)) / 1000;
   let pts = pointsFor(sec, t.span); if (t.hinted) pts = Math.round(pts / 2);
+  mark(t.item, t.hinted || sec > t.span * 0.8 ? 0.5 : 1);
   G.score += pts; G.streak++; G.read++; G.bestStreak = Math.max(G.bestStreak, G.streak); G.times.push(sec);
   floatText('+' + pts + (byMic ? ' 🎤' : ''), t.col * G.colW + 8, t.y);
   popTile(t); beep(true, G.streak); showCombo(); resolveWord();
@@ -953,16 +1078,22 @@ function land() {
   t.el.onclick = () => openRescue(t);
   G.stacks[t.col].push(t); placeTile(t);
   if (!G.missed.some((m) => m.text === t.item.text)) G.missed.push(t.item);
+  mark(t.item, 0);
   G.streak = 0; beep(false); showCombo();
   if (G.stacks[t.col].length >= G.rows) { G.active = null; levelEnd(); return; }
   resolveWord();
+}
+function mark(item, r) {
+  if (item.lang === 'math') return;
+  const k = mKey(item.lang, item.text), prev = G.res.get(k);
+  G.res.set(k, prev == null ? r : Math.min(prev, r));
 }
 function relayoutCol(col) { G.stacks[col].forEach((t, i) => { t.y = G.H - (i + 1) * G.rowH; placeTile(t); }); }
 function rescue(t) {
   const col = t.col, idx = G.stacks[col].indexOf(t);
   if (idx < 0) return;
   G.stacks[col].splice(idx, 1);
-  floatText('✓', col * G.colW + 8, t.y); popTile(t); beep(true); relayoutCol(col); closeRescue();
+  mark(t.item, 0.5); floatText('✓', col * G.colW + 8, t.y); popTile(t); beep(true); relayoutCol(col); closeRescue();
 }
 function openRescue(t) {
   if (G.rescueTile) G.rescueTile.el.classList.remove('rescue');
@@ -1008,7 +1139,7 @@ function startGame(listId, levelIdx) {
   const items = levelItems(G.list, levelIdx);
   Object.assign(G, {
     stacks: Array.from({ length: G.cols }, () => []), active: null, queue: items, levelIdx, total: items.length, resolved: 0,
-    score: 0, streak: 0, bestStreak: 0, read: 0, missed: [], times: [], fallSec: levelSec(levelIdx), colorIdx: 0, paused: false, spawnDelay: 0,
+    score: 0, streak: 0, bestStreak: 0, read: 0, missed: [], res: new Map(), times: [], fallSec: levelSec(levelIdx), colorIdx: 0, paused: false, spawnDelay: 0,
   });
   hud(); showCombo();
   recog.onWords = onHeard;
@@ -1016,15 +1147,63 @@ function startGame(listId, levelIdx) {
   if (profile().mic === 'mic' && recog.supported) recog.start();
   else { recog.stop(); $('#heard').textContent = recog.supported ? 'Mic off (parent mode)' : 'No speech recognition in this browser'; }
   if ('speechSynthesis' in window) speechSynthesis.speak(new SpeechSynthesisUtterance(''));
-  countdown(3, () => { G.running = true; G.last = performance.now(); G.raf = requestAnimationFrame(frame); });
+  warmup(items, G.list, () => countdown(3, () => { G.running = true; G.last = performance.now(); G.raf = requestAnimationFrame(frame); }));
 }
+
+// ---------- warm-up: listen, see how it is spelled, say it back ----------
+const W = { list: [], i: 0, done: null, lesson: null, timer: 0 };
+function warmup(items, list, done) {
+  const seen = new Set();
+  W.list = items.filter((it) => it.lang !== 'math' && !seen.has(it.lang + it.text) && seen.add(it.lang + it.text) && (list.phonics || !isKnown(it.lang, it.text))).slice(0, list.phonics ? 15 : 8);
+  if (!W.list.length || profile().warmup === 'off') { done(); return; }
+  Object.assign(W, { i: 0, done, lesson: list.phonics ? TH.LESSONS[G.levelIdx] : null });
+  recog.onWords = warmHeard;
+  $('#warmOverlay').classList.remove('hidden');
+  warmShow();
+}
+function warmShow() {
+  const it = W.list[W.i], th = it.lang === 'th' && typeof TH !== 'undefined';
+  clearTimeout(W.timer);
+  $('#warmCount').textContent = `${W.i + 1} / ${W.list.length}`;
+  $('#warmWord').textContent = it.text; $('#warmWord').className = 'warm-word ' + it.lang;
+  const ex = th ? TH.explain(it.text) : null;
+  $('#warmParts').innerHTML = (ex || []).map((p) => `<span class="part ${p.k}"><b>${escapeHtml(p.t)}</b><small>${escapeHtml(p.label)}</small></span>`).join('');
+  const l = W.lesson || (th && TH.lessonOf[it.text]);
+  $('#warmNote').textContent = l ? `${l.title} · ${l.note}` : '';
+  W.spell = th ? TH.spellText(it.text) : null;
+  $('#warmSpell').classList.toggle('hidden', !W.spell);
+  $('#warmHeard').textContent = recog.active ? '🎤 Your turn: say it!' : 'Say it, then tap ✓';
+  recog.setLang(srLang(it.lang));
+  say(W.spell && (W.lesson || it.text.length > 1) ? W.spell : sayText(it), it.lang);
+}
+function warmNext() { W.i++; if (W.i >= W.list.length) warmEnd(); else warmShow(); }
+function warmEnd() {
+  clearTimeout(W.timer);
+  $('#warmOverlay').classList.add('hidden');
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
+  recog.onWords = onHeard;
+  if (G.queue[0]) recog.setLang(srLang(G.queue[0].lang));
+  const d = W.done; W.done = null; if (d) d();
+}
+function warmHeard(alts) {
+  const it = W.done && W.list[W.i];
+  if (!it || !matches(it, alts)) return false;
+  beep(true); $('#warmHeard').textContent = '✓ Great!';
+  clearTimeout(W.timer); W.timer = setTimeout(warmNext, 700);
+  return true;
+}
+$('#warmSay').onclick = () => { const it = W.list[W.i]; if (it) say(sayText(it), it.lang); };
+$('#warmSpell').onclick = () => { const it = W.list[W.i]; if (it && W.spell) say(W.spell, it.lang); };
+$('#warmOk').onclick = () => W.done && warmNext();
+$('#warmSkip').onclick = () => W.done && warmEnd();
+$('#warmQuit').onclick = () => { W.done = null; clearTimeout(W.timer); $('#warmOverlay').classList.add('hidden'); stopGame(); show('home'); renderHome(); };
 function countdown(n, done) {
   const c = document.createElement('div'); c.className = 'countdown'; $('#board').appendChild(c);
   const tick = () => { if (n === 0) { c.remove(); done(); return; } c.textContent = n--; setTimeout(tick, 650); };
   tick();
 }
 function setPaused(p) { if (!G.running) return; G.paused = p; $('#pauseOverlay').classList.toggle('hidden', !p); }
-function stopGame() { G.running = false; cancelAnimationFrame(G.raf); recog.stop(); closeRescue(); }
+function stopGame() { if (W.done) { W.done = null; $('#warmOverlay').classList.add('hidden'); } G.running = false; cancelAnimationFrame(G.raf); recog.stop(); closeRescue(); }
 function levelEnd() {
   stopGame();
   const max = G.total * MAX_PTS, pct = Math.round(G.score / max * 100), passed = pct >= PASS_PCT;
@@ -1033,6 +1212,11 @@ function levelEnd() {
   if (isBest) { p[G.levelIdx] = { pct, score: G.score }; save(K.progress, progress); }
   const goal = +profile().goal, before = dayRec().passed;
   const rec = recordDay(passed, G.read, G.score);
+  const lr = learn(G.res);
+  $('#finLearn').textContent = [
+    lr.learned.length ? `New words learned: ${lr.learned.join(' ')}` : '',
+    ...lr.change.filter(([, a, b]) => Math.abs(b - a) >= 0.05).map(([l, a, b]) => `${SUBJECTS[l]} reading level ${b > a ? '↑' : '↓'} ${b.toFixed(1)}`),
+  ].filter(Boolean).join(' · ');
   const hasNext = G.levelIdx + 1 < levelCount(G.list);
   $('#finTitle').textContent = passed ? `Level ${G.levelIdx + 1} passed! 🎉` : `Level ${G.levelIdx + 1}: try again`;
   $('#finPct').textContent = pct + '%'; $('#finPct').classList.toggle('fail', !passed);
@@ -1081,7 +1265,143 @@ window.addEventListener('resize', () => {
   if (G.active) { const f = G.H / oldH; G.active.y *= f; G.active.v *= f; fitFont(G.active.el, G.active.item.text); placeTile(G.active); }
 });
 
+// ---------- cloud sync (Sign in with Google, Firebase) ----------
+const SYNC = [K.lists, K.profiles, K.progress, K.days, K.mastery, K.refs];
+const cloudState = { user: null, msg: '' };
+function cloudDirty(k) {
+  if (cloudQuiet || !SYNC.includes(k)) return;
+  localStorage.setItem('twd.cloud.dirty', '1');
+  if (Cloud) Cloud.dirty();
+}
+const cloudCfg = () => load(K.cloud, null);
+function parseCloudCfg(text) {
+  const t = text.trim();
+  try { const o = JSON.parse(t); if (o.apiKey && o.projectId) return o; } catch {}
+  const o = {}; for (const m of t.matchAll(/(\w+)\s*:\s*["']([^"']+)["']/g)) o[m[1]] = m[2];
+  return o.apiKey && o.projectId ? o : null;
+}
+const cloudData = () => ({ [K.lists]: lists, [K.profiles]: profiles, [K.progress]: progress, [K.days]: days, [K.mastery]: mastery });
+const cloudRefs = () => Object.entries(refs).flatMap(([pid, rs]) => rs.map((r) => ({ ...r, pid, c: 1 })));
+function cloudSet(data, refArr) {
+  cloudQuiet = true;
+  try {
+    if (data) {
+      if (data[K.lists]) lists = data[K.lists];
+      if (data[K.profiles]) profiles = data[K.profiles];
+      if (data[K.progress]) progress = data[K.progress];
+      if (data[K.days]) days = data[K.days];
+      if (data[K.mastery]) mastery = data[K.mastery];
+      saveAll(); save(K.mastery, mastery);
+    }
+    if (refArr) {
+      for (const k of Object.keys(refs)) delete refs[k];
+      for (const { pid, ...r } of refArr) (refs[pid] ||= []).push(r);
+      for (const rs of Object.values(refs)) rs.sort((a, b) => a.id.localeCompare(b.id));
+      saveRefs();
+    }
+    if (profiles.length && !profiles.some((p) => p.id === settings.profileId)) { settings.profileId = profiles[0].id; save(K.settings, settings); }
+  } finally { cloudQuiet = false; }
+  if ($('#home').classList.contains('active') && profile()) renderHome();
+}
+const mergeMap = (a = {}, b = {}, f) => { const o = { ...a }; for (const k in b) o[k] = k in o ? f(o[k], b[k]) : b[k]; return o; };
+function cloudMerge(remote, remoteRefs, uid) { // first sign-in on this device, or offline edits: keep both sides
+  const local = cloudData(), localRefs = cloudRefs();
+  if (!Object.keys(remote).length && !remoteRefs.length) return;
+  const first = localStorage.getItem('twd.cloud.uid') !== uid, dirty = localStorage.getItem('twd.cloud.dirty') === '1';
+  localStorage.setItem('twd.cloud.uid', uid);
+  if (!first && !dirty) { // the cloud is the truth; keep only photos made here that never reached it
+    const ids = new Set(remoteRefs.map((r) => r.id));
+    cloudSet(remote, [...remoteRefs, ...localRefs.filter((r) => !ids.has(r.id) && !findRef(r.id)?.c)]);
+    return;
+  }
+  const rp = remote[K.profiles] || [], map = {};
+  const profs = [...rp];
+  for (const p of local[K.profiles]) {
+    const m = rp.find((x) => x.name.trim().toLowerCase() === p.name.trim().toLowerCase());
+    if (m) map[p.id] = m.id; else profs.push(p);
+  }
+  const rk = (o) => Object.fromEntries(Object.entries(o || {}).map(([k, v]) => [map[k] || k, v]));
+  const byId = new Map((remote[K.lists] || []).map((l) => [l.id, l]));
+  for (const l of local[K.lists]) if (!byId.has(l.id)) byId.set(l.id, l);
+  const best = (x, y) => (y.score > x.score ? y : x);
+  const data = {
+    [K.profiles]: profs,
+    [K.lists]: [...byId.values()],
+    [K.progress]: mergeMap(remote[K.progress], rk(local[K.progress]), (x, y) => mergeMap(x, y, (u, v) => mergeMap(u, v, best))),
+    [K.days]: mergeMap(remote[K.days], rk(local[K.days]), (x, y) => mergeMap(x, y, (u, v) => mergeMap(u, v, (a, b) => (typeof a === 'number' ? Math.max(a, b) : a)))),
+    [K.mastery]: mergeMap(remote[K.mastery], rk(local[K.mastery]), (x, y) => ({ skill: mergeMap(x.skill, y.skill, Math.max), words: mergeMap(x.words, y.words, (a, b) => (b.n > a.n ? b : a)) })),
+  };
+  const rr = new Map(remoteRefs.map((r) => [r.id, r]));
+  for (const r of localRefs) if (!rr.has(r.id)) rr.set(r.id, { ...r, pid: map[r.pid] || r.pid });
+  if (map[settings.profileId]) { settings.profileId = map[settings.profileId]; save(K.settings, settings); }
+  cloudSet(data, [...rr.values()]);
+  localStorage.setItem('twd.cloud.dirty', '1');
+}
+const findRef = (id) => Object.values(refs).flat().find((r) => r.id === id);
+function cloudPushed() {
+  cloudQuiet = true;
+  let changed = false;
+  for (const r of Object.values(refs).flat()) if (!r.c) { r.c = 1; changed = true; }
+  if (changed) saveRefs();
+  cloudQuiet = false;
+  localStorage.setItem('twd.cloud.dirty', '0');
+}
+async function cloudPhotos() { // upload the big photo of each page once
+  if (!Cloud || !cloudState.user) return;
+  for (const r of Object.values(refs).flat()) {
+    if (r.up) continue;
+    const url = await idb.get(r.id);
+    if (!url) continue;
+    try { await Cloud.putPhoto(r.id, url); r.up = 1; saveRefs(); } catch (e) { console.warn('photo upload', e); return; }
+  }
+}
+function renderCloud() {
+  const cfg = cloudCfg(), u = cloudState.user;
+  $('#cloudStatus').textContent = !cfg ? 'Not set up yet' : u ? `Signed in as ${u.email || u.displayName}${cloudState.msg ? ' · ' + cloudState.msg : ''}` : cloudState.msg || 'Not signed in';
+  $('#cloudSignIn').classList.toggle('hidden', !cfg || !!u);
+  $('#cloudSignOut').classList.toggle('hidden', !u);
+  $('#cloudLink').classList.toggle('hidden', !cfg);
+  $('#cloudSetup').open = !cfg;
+  $('#cloudBtn').textContent = u ? '☁️' : '☁️?';
+  $('#cloudBtn').title = u ? `Synced with ${u.email || 'Google'}` : 'Sign in with Google to keep photos on every device';
+}
+async function cloudStart() {
+  const cfg = cloudCfg();
+  if (!cfg || Cloud) return;
+  try {
+    const m = await import('./cloud.js');
+    Cloud = m.start(cfg, {
+      device: (localStorage.getItem('twd.device') || (localStorage.setItem('twd.device', 'd' + Date.now()), localStorage.getItem('twd.device'))),
+      data: cloudData, refs: cloudRefs, merge: cloudMerge, apply: cloudSet, pushed: cloudPushed,
+      status: (user, msg = '') => { cloudState.user = user; cloudState.msg = msg; renderCloud(); if (user && msg === 'synced') cloudPhotos(); },
+    });
+  } catch (e) { cloudState.msg = 'Could not load sync: ' + e.message; renderCloud(); }
+}
+$('#cloudSave').onclick = () => {
+  const cfg = parseCloudCfg($('#cloudConfig').value);
+  if (!cfg) { toast('Paste the firebaseConfig from the Firebase console'); return; }
+  save(K.cloud, cfg); $('#cloudConfig').value = ''; toast('Saved. Now tap “Sign in with Google”'); renderCloud(); cloudStart();
+};
+$('#cloudSignIn').onclick = async () => {
+  if (!Cloud) await cloudStart();
+  try { await Cloud.signIn(); } catch (e) { toast('Sign-in failed: ' + (e.code || e.message), 4000); }
+};
+$('#cloudSignOut').onclick = () => Cloud && confirm('Sign out? This device keeps its copy.') && Cloud.signOut();
+$('#cloudLink').onclick = async () => {
+  const url = location.origin + location.pathname + '#cloud=' + btoa(unescape(encodeURIComponent(JSON.stringify(cloudCfg()))));
+  try { if (navigator.share) await navigator.share({ title: 'Word Drop sync', url }); else { await navigator.clipboard.writeText(url); toast('Link copied. Open it on the other device, then sign in with Google.', 4000); } }
+  catch { prompt('Open this link on the other device:', url); }
+};
+$('#cloudBtn').onclick = () => { showTab('me'); document.getElementById('cloudBox').scrollIntoView({ behavior: 'smooth' }); if (Cloud && !cloudState.user) $('#cloudSignIn').click(); };
+function checkCloudHash() {
+  const m = location.hash.match(/cloud=([^&]+)/);
+  if (!m) return;
+  history.replaceState(null, '', location.pathname + location.search);
+  try { const cfg = JSON.parse(decodeURIComponent(escape(atob(m[1])))); if (!cfg.apiKey) throw 0; save(K.cloud, cfg); toast('Sync is set up on this device. Sign in with Google in Settings.', 4000); }
+  catch { toast('Could not read the sync link'); }
+}
+
 // ---------- init ----------
-document.addEventListener('DOMContentLoaded', () => { checkHashImport(); renderHome(); });
-window.addEventListener('hashchange', () => { checkHashImport(); renderHome(); });
-window.__twd = { player, praise, soundKey, thaiNum, say, recog, refs, bookGrade, bookList, addRef, guessGrade, G, splitText, encodeList, decodeList, onHeard, correctActive, levelItems, getList, numbersIn, parseExpr, matches, mathItem, streak, days, progress };
+document.addEventListener('DOMContentLoaded', () => { checkCloudHash(); checkHashImport(); renderHome(); cloudStart(); });
+window.addEventListener('hashchange', () => { checkCloudHash(); checkHashImport(); renderHome(); cloudStart(); });
+window.__twd = { player, praise, smartWords, wordPool, learn, skillOf, cloudMerge, cloudData, cloudRefs, get mastery() { return mastery; }, soundKey, thaiNum, say, recog, refs, bookGrade, bookList, addRef, guessGrade, G, splitText, encodeList, decodeList, onHeard, correctActive, levelItems, getList, numbersIn, parseExpr, matches, mathItem, streak, days, progress };
