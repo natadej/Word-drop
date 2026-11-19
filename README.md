@@ -16,7 +16,7 @@ Static site: no build step, no server code. Serve the folder with any static ser
 - Level 1 starts at 3 s per item (setting), each level 0.1 s faster, minimum 1.8 s.
 
 ## Thai phonics and Listen & repeat
-- **🔤 Phonics** (Thai tab): one level per lesson: พยัญชนะ ก–ฮ in 4 levels (อักษรกลาง, อักษรสูง, อักษรต่ำคู่, อักษรต่ำเดี่ยว), สระ, แม่ ก กา, สระเสียงสั้น/ยาว, สระประสม, วรรณยุกต์ and ผันเสียง, แม่ กง กน กม เกย เกอว กก กด กบ, คำควบกล้ำ, อักษรนำ, คำหลายพยางค์ and ตัวการันต์ (`thai.js`).
+- **🔤 Phonics** (Thai tab): one level per lesson: พยัญชนะ ก–ฮ in 4 levels (อักษรกลาง, อักษรสูง, อักษรต่ำคู่, อักษรต่ำเดี่ยว), สระ in 3 levels (สระเสียงสั้น, สระเสียงยาว, สระเกิน), แม่ ก กา, สระเสียงสั้น/ยาว, สระประสม, วรรณยุกต์ and ผันเสียง, แม่ กง กน กม เกย เกอว กก กด กบ, คำควบกล้ำ, อักษรนำ, คำหลายพยางค์ and ตัวการันต์ (`thai.js`).
 - Before a level, a quick **Listen & repeat** warm-up shows each new word split into พยัญชนะต้น, สระ, ตัวสะกด (แม่ …) and วรรณยุกต์, spells it aloud (e.g. บอ-อา-นอ-บาน-ไม้โท-บ้าน) and waits for the child to say it (mic or ✓). Words he already knows are left out. ⏭ skips it; it can be turned off in Settings.
 
 ## Profiles and daily record
