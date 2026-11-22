@@ -33,6 +33,10 @@
   </nav>
 
   <div id="tab-learn" class="tab">
+    <div class="learn-top">
+      <button id="buddyMini" class="buddy-mini"><span id="buddyFace">🥚</span><span><small>Word Buddy</small><b id="buddyText"></b></span></button>
+      <button class="btn small ghost how-btn">❓ How to play</button>
+    </div>
     <div id="questCard" class="panel quests">
       <div class="quest-head">
         <h3>Daily quests</h3>
@@ -88,6 +92,13 @@
       <button id="meEdit" class="btn small ghost">✎ Edit</button>
     </div>
     <div class="panel stats-grid" id="meStats"></div>
+    <div class="panel points">
+      <h3>How points work <button class="btn small ghost how-btn">❓ How to play</button></h3>
+      <div class="pt"><i>⭐</i><div><b>Score</b><small>Read fast inside a level. 80% passes, and you get 1–3 stars.</small></div></div>
+      <div class="pt"><i>⚡</i><div><b>XP</b><small>Every level adds XP. XP raises your rank and your place on the leaderboard.</small></div></div>
+      <div class="pt"><i>💎</i><div><b>Gems</b><small>Earn: pass a level, get 100%, quests, trophies, album pages, surprise eggs. Spend: Buddy food and hats, avatars, streak freezes.</small></div></div>
+      <div class="pt"><i>📖</i><div><b>Learned words</b><small>Read a word right in 3 levels to learn it. It grows your Buddy and becomes a sticker.</small></div></div>
+    </div>
     <div id="todayCard" class="panel today">
       <div class="today-top">
         <div><div class="k">Today</div><div id="todayText" class="today-text"></div></div>
@@ -167,9 +178,42 @@
     </div>
   </div>
 
+  <div id="tab-pet" class="tab hidden">
+    <div class="panel pet-card">
+      <h3 id="petTitle"></h3>
+      <div class="pet-box">
+        <div id="petBubble" class="pet-bubble hidden"></div>
+        <button id="pet" class="pet"><span id="petHat" class="pet-hat"></span><span id="petFace">🥚</span></button>
+      </div>
+      <div id="petMood" class="pet-mood"></div>
+      <div class="tier-bar"><div id="petBar"></div></div>
+      <small id="petNext" class="muted"></small>
+      <div id="petPick" class="pet-pick hidden">
+        <button data-kind="dragon" class="btn"><i>🐉</i> Dragon</button>
+        <button data-kind="cat" class="btn"><i>🐱</i> Cat</button>
+        <button data-kind="robot" class="btn"><i>🤖</i> Robot</button>
+      </div>
+      <div id="petActions" class="pet-actions">
+        <button id="petTalk" class="btn small">🎤 Talk to me</button>
+        <button id="petSay" class="btn small">🔊 Say a word</button>
+        <button id="petFeed" class="btn small">🍎 Feed <b id="petFood"></b></button>
+      </div>
+      <p class="hint">Your Buddy only knows words you have learned. Tap it to hear one!</p>
+    </div>
+    <div class="panel"><h3>🎁 Daily surprise</h3><div id="dailyBox" class="daily-box"></div></div>
+    <div class="panel"><h3>📒 Sticker album <span id="albumCount" class="muted"></span></h3>
+      <select id="albumSel" class="album-sel"></select>
+      <div id="albumGrid" class="album-grid"></div>
+      <p class="hint">Learn every word on a page to win 💎 and a new hat. Read a word in under 1 second for a ✨ shiny sticker.</p>
+    </div>
+    <div class="panel"><h3>💬 Buddy phrases <span id="phraseCount" class="muted"></span></h3><div id="phrases" class="phrases"></div></div>
+    <div class="panel"><h3>🎩 Hats and colours <span class="muted">· spend 💎 gems</span></h3><div id="hatShop" class="shop"></div></div>
+  </div>
+
   <nav class="bottom-nav" id="bottomNav">
     <button data-tab="learn" class="sel"><i>🏠</i><small>Learn</small></button>
     <button data-tab="lists"><i>📚</i><small>Lists</small></button>
+    <button data-tab="pet" id="navPet"><i>🐣</i><small>Buddy</small></button>
     <button data-tab="ranks"><i>🏆</i><small>Ranks</small></button>
     <button data-tab="me"><i>😊</i><small>Me</small></button>
   </nav>
@@ -387,6 +431,16 @@
 </div>
 
 <!-- CELEBRATION -->
+<div id="howto" class="overlay hidden">
+  <div class="dialog howto">
+    <button id="howSkip" class="btn small ghost how-skip">Skip ✕</button>
+    <div id="howIcon" class="cele-icon"></div>
+    <h2 id="howTitle"></h2>
+    <p id="howText"></p>
+    <div id="howDots" class="how-dots"></div>
+    <div class="row"><button id="howBack" class="btn ghost">‹ Back</button><button id="howNext" class="btn primary big">Next ›</button></div>
+  </div>
+</div>
 <div id="celebrate" class="overlay celebrate hidden">
   <div class="confetti" id="confetti"></div>
   <div class="dialog cele">
@@ -416,6 +470,7 @@
 <script src="thai.js" defer></script>
 <script src="app.js" defer></script>
 <script src="fun.js" defer></script>
+<script src="pet.js" defer></script>
 <script src="ranks.js" defer></script>
 </body>
 </html>

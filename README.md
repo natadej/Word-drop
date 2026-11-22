@@ -59,6 +59,13 @@ Bottom tabs: **Learn** (daily quests and a path of levels with 1–3 stars), **L
 - **Gems and shop:** avatars, tile colour themes and streak freezes (a freeze keeps the streak when a day is missed, up to 2).
 - **Combos:** a counter, rising beeps and a voice cheer at 5, 10, 15 in a row.
 
+## Word Buddy, sticker album and daily surprise (`pet.js`)
+- **How to play:** 6 short cards on first launch; open again with ❓ How to play on Learn or Me. Me also has a "How points work" panel (Score, XP, Gems, learned words).
+- **Word Buddy:** an egg that hatches after the first passed level. Pick a dragon, cat or robot. It grows with learned words (10, 50, 150, 300, 600) and can only say words the child has learned (read right in 3 levels). Tap it to hear a word, or use 🎤 Talk to me: if the word is learned it repeats it, otherwise it asks to be taught in a level. Phrases unlock once every word in them is learned.
+- **Mood:** hungry after a day without feeding, sad after two. Each passed level gives 🍎 food; without food, feeding costs 5 💎. It never dies.
+- **Sticker album:** one page per Thai phonics lesson and per 15 bank words. Learned words become stickers; reading one in under 1 second makes it ✨ shiny. A full page gives 15 💎 and a hat.
+- **Daily surprise egg:** the first level each day unlocks an egg on the Buddy tab (gems, food, a hat or a shiny sticker). 3, 7, 14 and 30-day streaks give a bow, gold colour, crown and rainbow colour.
+
 ## Voices
 Built-in words and the cheers are pre-recorded with natural neural voices (`audio/`, made by `tools/make_voices.py` with [edge-tts](https://github.com/rany2/edge-tts)). Other words use Gemini's voice when a key is set (cached in the browser after the first time), otherwise the device's text-to-speech.
 
