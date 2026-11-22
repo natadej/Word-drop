@@ -355,3 +355,58 @@ label input[type=text]{width:100%}
 .confetti i{position:absolute;top:-20px;width:10px;height:16px;border-radius:3px;animation:fall linear forwards}
 @keyframes fall{to{transform:translateY(110vh) rotate(720deg)}}
 .share-img{width:min(320px,80vw);border-radius:14px}
+/* Word Buddy, album, how to play */
+.learn-top{display:flex;gap:8px;align-items:stretch;margin-bottom:10px}
+.buddy-mini{flex:1;display:flex;align-items:center;gap:10px;font:inherit;color:inherit;text-align:left;background:var(--surface);border:2px solid var(--surface2);border-radius:16px;padding:6px 12px;cursor:pointer}
+.buddy-mini #buddyFace{font-size:34px}
+.buddy-mini small{display:block;color:var(--muted);font-size:11px}
+.buddy-mini b{font-size:13px}
+.bottom-nav button{position:relative}
+.bottom-nav button.dot::after{content:'';position:absolute;top:2px;right:calc(50% - 18px);width:10px;height:10px;border-radius:50%;background:var(--danger)}
+.pet-card{text-align:center}
+.pet-box{position:relative;height:170px;display:flex;align-items:flex-end;justify-content:center}
+.pet{position:relative;background:none;border:0;cursor:pointer;line-height:1;font-size:64px;padding:0 0 6px;transition:font-size .4s}
+.pet.st1{font-size:76px}.pet.st2{font-size:90px}.pet.st3{font-size:104px}.pet.st4{font-size:116px}.pet.st5{font-size:128px}
+.pet.st4,.pet.st5{filter:drop-shadow(0 0 12px #ffe066)}
+.pet.gold #petFace{filter:sepia(1) saturate(4) hue-rotate(-10deg) brightness(1.1)}
+.pet.rainbow #petFace{animation:rainbow 3s linear infinite}
+@keyframes rainbow{to{filter:hue-rotate(360deg)}}
+.pet.sad #petFace{filter:grayscale(.6);opacity:.8}
+.pet.hungry{animation:pulse 1.6s infinite}
+.pet.wobble{animation:shake .6s infinite}
+.pet.hop{animation:hop .5s}
+@keyframes hop{40%{transform:translateY(-24px) scale(1.08)}}
+.pet-hat{position:absolute;left:50%;top:-.38em;transform:translateX(-50%);font-size:.42em}
+.pet-bubble{position:absolute;top:0;left:50%;transform:translateX(-50%);max-width:90%;background:#fff;color:#222;font-weight:700;font-size:18px;padding:8px 14px;border-radius:16px;z-index:2;box-shadow:0 4px 12px rgba(0,0,0,.25)}
+.pet-bubble::after{content:'';position:absolute;bottom:-8px;left:50%;margin-left:-8px;border:8px solid transparent;border-bottom:0;border-top-color:#fff}
+.pet-mood{font-weight:700;margin:4px 0 8px}
+.pet-pick,.pet-actions{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:10px 0 4px}
+.pet-pick i{font-style:normal;font-size:24px}
+.daily-box{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.daily-box .hint{flex:1;margin:0}
+.streak-prizes{display:flex;gap:8px;width:100%}
+.streak-prizes span{flex:1;text-align:center;background:var(--surface2);border-radius:12px;padding:6px 0;opacity:.6}
+.streak-prizes span.got{opacity:1;outline:2px solid var(--accent)}
+.streak-prizes i{display:block;font-style:normal;font-size:22px}
+.album-sel{width:100%;font:inherit;padding:8px;border-radius:10px;margin-bottom:10px}
+.album-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:8px}
+.sticker{position:relative;font:700 18px var(--font);min-height:56px;border-radius:14px;border:2px dashed var(--surface2);background:transparent;color:var(--muted);opacity:.45;cursor:pointer}
+.sticker.got{opacity:1;border:0;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.4);box-shadow:0 3px 0 rgba(0,0,0,.25);transform:rotate(-2deg)}
+.sticker.got:nth-child(even){transform:rotate(2deg)}
+.sticker.c0{background:#ff6b8b}.sticker.c1{background:#ffa34d}.sticker.c2{background:#4cc38a}.sticker.c3{background:#4da3ff}.sticker.c4{background:#a77bff}.sticker.c5{background:#22b8cf}
+.sticker.shiny{background:linear-gradient(135deg,#ffe066,#ff9ff3,#74c0fc,#ffe066)!important;background-size:300% 300%!important;animation:shine 2.5s linear infinite;color:#3a2600;text-shadow:none}
+.sticker.shiny::after{content:'✨';position:absolute;top:-6px;right:-4px;font-size:14px}
+@keyframes shine{to{background-position:300% 0}}
+.phrases{display:flex;flex-direction:column;gap:6px}
+.phrase{font:700 17px var(--font);text-align:left;padding:8px 12px;border-radius:12px;border:0;background:var(--surface2);color:var(--muted);cursor:pointer}
+.phrase.open{background:var(--accent);color:#fff}
+.phrase em{font-style:normal;opacity:.5}.phrase em.ok{opacity:1;color:var(--text)}
+.points h3{display:flex;justify-content:space-between;align-items:center}
+.pt{display:flex;gap:10px;align-items:flex-start;margin:8px 0}
+.pt i{font-style:normal;font-size:24px;width:30px;text-align:center}
+.pt b{display:block}.pt small{color:var(--muted)}
+.howto{position:relative;text-align:center;max-width:360px}
+.how-skip{position:absolute;top:8px;right:8px}
+.how-dots{display:flex;gap:6px;justify-content:center;margin:10px 0}
+.how-dots i{width:8px;height:8px;border-radius:50%;background:var(--surface2)}.how-dots i.on{background:var(--accent)}
+.invisible{visibility:hidden}

@@ -633,9 +633,9 @@ const starsHtml = (pct) => [1, 2, 3].map((k) => `<i class="${k <= starCount(pct)
 let tab = 'learn';
 function showTab(t) {
   tab = t;
-  ['learn', 'lists', 'ranks', 'me'].forEach((x) => $('#tab-' + x).classList.toggle('hidden', x !== t));
+  ['learn', 'lists', 'ranks', 'me', 'pet'].forEach((x) => $('#tab-' + x).classList.toggle('hidden', x !== t));
   $$('#bottomNav button').forEach((b) => b.classList.toggle('sel', b.dataset.tab === t));
-  $('#subjectTabs').classList.toggle('hidden', t === 'ranks' || t === 'me');
+  $('#subjectTabs').classList.toggle('hidden', t === 'ranks' || t === 'me' || t === 'pet');
   renderHome(); window.scrollTo(0, 0);
   if (t === 'ranks' && typeof renderRanks === 'function') renderRanks();
 }
@@ -1118,6 +1118,7 @@ function correctTile(t, byMic) {
   if (t.gold || t.boss) pts *= 2;
   mark(t.item, t.hinted || sec > t.span * 0.8 ? 0.5 : 1);
   G.score += pts; G.streak++; G.read++; G.bestStreak = Math.max(G.bestStreak, G.streak); G.times.push(sec);
+  if (sec <= 1 && !t.hinted && t.item.lang !== 'math') G.fastWords.push(mKey(t.item.lang, t.item.text));
   G.speed = Math.min(1.35, G.speed + 0.03);
   floatText('+' + pts + (byMic ? ' 🎤' : ''), tileX(t) + 8, t.y);
   dropTile(t); popTile(t); beep(true, G.streak); showCombo();
@@ -1197,7 +1198,7 @@ function startGame(listId, levelIdx) {
   const review = G.lastMissedList === G.list.id ? G.lastMissed : [];
   Object.assign(G, {
     stacks: Array.from({ length: G.cols }, () => []), falling: [], pick: null, lastFocus: null, queue: items, levelIdx, total: items.length, resolved: 0, spawned: 0, hearts: HEARTS, speed: 1, over: '',
-    score: 0, streak: 0, bestStreak: 0, read: 0, missed: [], res: new Map(), times: [], fallSec: levelSec(levelIdx), colorIdx: 0, paused: false, spawnDelay: 0,
+    score: 0, streak: 0, bestStreak: 0, read: 0, missed: [], res: new Map(), times: [], fastWords: [], fallSec: levelSec(levelIdx), colorIdx: 0, paused: false, spawnDelay: 0,
   });
   hud(); showCombo(); renderCastle();
   recog.onWords = onHeard;
@@ -1295,7 +1296,7 @@ function levelEnd() {
     : `Today: ${rec.passed}/${goal} levels passed`;
   $('#nextBtn').classList.toggle('hidden', !(passed && hasNext));
   $('#finStars').innerHTML = passed ? starsHtml(pct) : '';
-  if (typeof funLevelEnd === 'function') funLevelEnd({ pct, passed, score: G.score, read: G.read, total: G.total, combo: G.bestStreak, fast: G.times.filter((x) => x <= 1).length, avg: G.times.length ? G.times.reduce((a, b) => a + b, 0) / G.times.length : 99, subject: G.list.subject });
+  if (typeof funLevelEnd === 'function') funLevelEnd({ pct, passed, score: G.score, read: G.read, total: G.total, combo: G.bestStreak, fast: G.times.filter((x) => x <= 1).length, fastWords: G.fastWords, avg: G.times.length ? G.times.reduce((a, b) => a + b, 0) / G.times.length : 99, subject: G.list.subject });
   praise(passed ? 3 : 4, G.list.subject === 'mix' ? 'th' : G.list.subject);
   const m = $('#finMissed'); m.innerHTML = '';
   $('#finMissedWrap').classList.toggle('hidden', !G.missed.length);

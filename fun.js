@@ -127,6 +127,7 @@ function funLevelEnd(r) {
   if (tierAfter > tierBefore) cele.push({ icon: TIERS[tierAfter][2], title: `${TIERS[tierAfter][1]} rank!`, text: `You reached ${TIERS[tierAfter][0].toLocaleString()} XP. Keep going!`, voice: 5 });
   if (questsDone() && q.chest === 'closed') cele.push({ icon: '🎁', title: 'All quests done!', text: 'Your treasure chest is ready. Open it on the Learn page.' });
   cele.push(...checkTrophies());
+  if (typeof petLevelEnd === 'function') cele.push(...petLevelEnd(r));
   $('#finRewards').innerHTML = `<span class="rw xp">+${xp} XP</span>${gems ? `<span class="rw gem">+${gems} 💎</span>` : ''}`
     + newlyDone.map((x) => `<span class="rw quest">✓ ${escapeHtml(QUESTS[x.id].text(x.n))}</span>`).join('');
   if (typeof pushScore === 'function') pushScore();
@@ -195,6 +196,7 @@ function renderFun() {
   }
   $('#trophyCount').textContent = `${Object.keys(f.trophies).length}/${TROPHIES.length}`;
   renderShop();
+  if (typeof renderPet === 'function') renderPet();
 }
 function buy(cost, what) {
   const f = F();
