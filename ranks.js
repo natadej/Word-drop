@@ -74,7 +74,7 @@ async function renderRanks() {
   me.classList.remove('hidden');
   me.innerHTML = `<span class="avatar big">${f.avatar}</span><div><b>${escapeHtml(joined ? f.board.nick : profile().name)}</b>
     <small>${myRank ? `#${myRank} ${boardKind === 'week' ? 'this week' : 'all time'}` : 'Play a level to get on the board'}</small></div>
-    <button id="shareBtn" class="btn primary small">📤 Share</button>${joined ? '<button id="leaveBtn" class="btn ghost small" title="Leave leaderboard">✕</button>' : ''}`;
+    <button id="shareBtn" class="btn primary small">📤 Share</button>${joined ? '<button id="leaveBtn" class="btn ghost small" title="Leave leaderboard">Leave</button>' : ''}`;
   $('#shareBtn').onclick = shareCard;
   const lv = $('#leaveBtn'); if (lv) lv.onclick = leaveBoard;
 }

@@ -18,10 +18,10 @@
   <header class="topbar">
     <button id="profileBtn" class="who"><span id="avatar" class="avatar">🐵</span><span id="profileName">Player</span></button>
     <div class="pills">
-      <button id="cloudBtn" class="pill cloud-pill" title="Sync">☁️?</button>
-      <span class="pill fire" title="Day streak">🔥<b id="streakNum">0</b></span>
-      <span class="pill gem" title="Gems">💎<b id="gemNum">0</b></span>
-      <span class="pill xp" title="XP"><i id="tierIcon">🥉</i><b id="xpNum">0</b></span>
+      <button id="cloudBtn" class="pill cloud-pill" title="Sign in to keep photos on every device"><i>☁️</i><small id="cloudLbl">Sign in</small></button>
+      <span class="pill fire" title="Day streak"><i>🔥</i><b id="streakNum">0</b><small>Days</small></span>
+      <span class="pill gem" title="Gems"><i>💎</i><b id="gemNum">0</b><small>Gems</small></span>
+      <span class="pill xp" title="XP"><i id="tierIcon">🥉</i><b id="xpNum">0</b><small>XP</small></span>
     </div>
   </header>
   <nav id="subjectTabs" class="tabs">
@@ -36,7 +36,7 @@
     <div id="questCard" class="panel quests">
       <div class="quest-head">
         <h3>Daily quests</h3>
-        <button id="chestBtn" class="chest" title="Finish all 3 quests to open">🎁</button>
+        <button id="chestBtn" class="chest" title="Finish all 3 quests to open"><i id="chestIcon">🎁</i><small>Reward</small></button>
       </div>
       <div id="questList" class="quest-list"></div>
     </div>
@@ -68,8 +68,8 @@
     <div id="rankJoin" class="panel join hidden">
       <h3>Join the global leaderboard</h3>
       <p class="hint">Other players see only a fun nickname and your avatar, never your real name.</p>
-      <div class="nick-row"><span id="joinAvatar" class="avatar big">🐵</span><b id="joinNick">Speedy Tiger</b><button id="nickRoll" class="btn small ghost" title="New name">🎲</button></div>
-      <button id="joinBtn" class="btn primary big">Join</button>
+      <div class="nick-row"><span id="joinAvatar" class="avatar big">🐵</span><b id="joinNick">Speedy Tiger</b><button id="nickRoll" class="btn small ghost" title="New name">🎲 New name</button></div>
+      <button id="joinBtn" class="btn primary big">Join leaderboard</button>
     </div>
     <div id="rankMe" class="panel rank-me hidden"></div>
     <ol id="rankList" class="rank-list"></ol>
@@ -85,7 +85,7 @@
         <div class="tier-bar"><div id="meTierBar"></div></div>
         <small id="meTierNext" class="muted"></small>
       </div>
-      <button id="meEdit" class="btn small ghost">✎</button>
+      <button id="meEdit" class="btn small ghost">✎ Edit</button>
     </div>
     <div class="panel stats-grid" id="meStats"></div>
     <div id="todayCard" class="panel today">
@@ -151,7 +151,7 @@
       </div>
     </details>
     <div id="cloudBox" class="panel cloud">
-      <div class="cloud-head"><b>☁️ Sync with Google</b> <span id="cloudStatus" class="muted"></span></div>
+      <div class="cloud-head"><b>☁️ Sign in &amp; sync</b> <span id="cloudStatus" class="muted"></span></div>
       <p class="hint">Sign in with the same Google account on every phone or tablet: book photos, lists, progress and learned words follow you.</p>
       <div class="row">
         <button id="cloudSignIn" class="btn primary">Sign in with Google</button>
@@ -269,7 +269,7 @@
 <!-- GAME -->
 <section id="game" class="screen">
   <div class="hud">
-    <button id="pauseBtn" class="btn ghost icon" title="Pause">⏸</button>
+    <button id="pauseBtn" class="btn ghost icon" title="Pause"><span>⏸</span><small>Pause</small></button>
     <div class="stat"><span class="k">Level</span><span id="hudLevel" class="v">1</span></div>
     <div class="stat"><span class="k">Word</span><span id="hudWord" class="v">0/15</span></div>
     <div class="stat"><span class="k">Score</span><span id="hudScore" class="v">0</span></div>
@@ -304,7 +304,7 @@
       <div class="warm-top">
         <span id="warmCount" class="muted"></span>
         <b>👂 Listen, then say it · ฟังแล้วพูดตาม</b>
-        <button id="warmQuit" class="btn small ghost" title="Back to menu">✕</button>
+        <button id="warmQuit" class="btn small ghost" title="Back to menu">✕ Exit</button>
       </div>
       <div id="warmWord" class="warm-word"></div>
       <div id="warmParts" class="warm-parts"></div>
@@ -322,9 +322,9 @@
   <div id="rescuePop" class="rescue-pop hidden">
     <div id="rescueWord" class="rescue-word"></div>
     <div class="row">
-      <button id="rescueSay" class="btn small">🔊</button>
+      <button id="rescueSay" class="btn small">🔊 Hear</button>
       <button id="rescueOk" class="btn small ok">✓ Read it</button>
-      <button id="rescueClose" class="btn small ghost">✕</button>
+      <button id="rescueClose" class="btn small ghost">✕ Close</button>
     </div>
   </div>
 
