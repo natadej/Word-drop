@@ -174,7 +174,7 @@ function renderFun() {
   }
   const chest = $('#chestBtn');
   chest.className = 'chest' + (q.chest === 'opened' ? ' opened' : questsDone() ? ' ready' : '');
-  chest.textContent = q.chest === 'opened' ? '✨' : '🎁';
+  $('#chestIcon').textContent = q.chest === 'opened' ? '✨' : '🎁';
   // me
   $('#meAvatar').textContent = f.avatar; $('#meName').textContent = profile().name;
   $('#meTier').textContent = `${TIERS[t][2]} ${TIERS[t][1]} rank · ${f.xp.toLocaleString()} XP`;
@@ -183,7 +183,7 @@ function renderFun() {
   $('#meTierNext').textContent = nx ? `${(nx[0] - f.xp).toLocaleString()} XP to ${nx[2]} ${nx[1]}` : 'Top rank!';
   $('#meStats').innerHTML = [['🔥', streak(), 'day streak'], ['📖', f.words.toLocaleString(), 'words read'], ['⭐', f.levels, 'levels passed'], ['🌀', f.bestCombo, 'best combo']]
     .map(([i, v, k]) => `<div><i>${i}</i><b>${v}</b><small>${k}</small></div>`).join('');
-  $('#freezeInfo').textContent = `🧊 ${f.freezes}/${FREEZE_MAX}`;
+  $('#freezeInfo').textContent = `🧊 ${f.freezes}/${FREEZE_MAX} freezes`;
   // trophies
   const tr = $('#trophies'); tr.innerHTML = '';
   for (const [id, icon, name, desc] of TROPHIES) {

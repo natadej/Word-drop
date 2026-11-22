@@ -535,10 +535,10 @@ function renderHome() {
     const passedN = Object.values(pr).filter((x) => x.pct >= PASS_PCT).length;
     const preview = l.words ? l.words.slice(0, 8).join(' ') : `${n} levels`;
     li.innerHTML = `<div class="name"><b>${escapeHtml(l.name)}</b><small class="${s}">${l.words ? l.words.length + ' · ' : ''}${escapeHtml(preview)}</small></div>
-      <span class="best">${passedN}/${n} ✓</span>
-      <button class="btn small" data-act="play">▶</button>
-      ${l.book ? '<button class="btn small ghost" data-act="delbook" title="Delete whole book">🗑</button>' : ''}
-      ${l.builtin ? '' : '<button class="btn small ghost" data-act="edit">✎</button><button class="btn small ghost" data-act="share" title="Share link">🔗</button><button class="btn small ghost" data-act="del" title="Delete">🗑</button>'}`;
+      <span class="best">${passedN}/${n} done</span>
+      <div class="acts"><button class="btn small" data-act="play">▶ Play</button>
+      ${l.book ? '<button class="btn small ghost" data-act="delbook" title="Delete whole book">🗑 Delete book</button>' : ''}
+      ${l.builtin ? '' : '<button class="btn small ghost" data-act="edit">✎ Edit</button><button class="btn small ghost" data-act="share" title="Share link">🔗 Share</button><button class="btn small ghost" data-act="del" title="Delete">🗑 Delete</button>'}</div>`;
     li.querySelector('.name').onclick = () => { settings.listId[s] = l.id; saveAll(); showTab('learn'); };
     li.querySelector('[data-act=play]').onclick = () => { settings.listId[s] = l.id; saveAll(); startGame(l.id); };
     const e = li.querySelector('[data-act=edit]'); if (e) e.onclick = () => openEditor(l);
@@ -579,7 +579,7 @@ function renderRefs(s) {
   for (const r of [...rs].reverse()) {
     const b = document.createElement('button');
     b.className = 'ref-thumb';
-    b.innerHTML = `<img ${r.thumb ? `src="${r.thumb}"` : ''} alt=""><span>${r.grade <= 0 ? 'K' : 'G' + r.grade} · ${r.items.length + (r.more?.length || 0)}</span>`;
+    b.innerHTML = `<img ${r.thumb ? `src="${r.thumb}"` : ''} alt=""><span>${r.grade <= 0 ? 'Kinder' : 'Grade ' + r.grade}<br>${r.items.length + (r.more?.length || 0)} words</span>`;
     b.onclick = () => openRef(r);
     strip.appendChild(b);
   }
@@ -621,7 +621,7 @@ function renderLevels() {
     b.innerHTML = `${cur ? '<span class="start">START</span>' : ''}
       <span class="bubble">${unlocked ? (passed ? '★' : i + 1) : '🔒'}</span>
       <span class="stars-row">${passed ? starsHtml(best.pct) : ''}</span>
-      <span class="lv">Level ${i + 1} · ${levelSec(i).toFixed(1)}s</span>
+      <span class="lv">Level ${i + 1} · ${levelSec(i).toFixed(1)}s a word</span>
       <span class="lv-desc ${list.subject}">${escapeHtml(preview)}</span>`;
     if (unlocked) b.onclick = () => startGame(list.id, i);
     box.appendChild(b);
@@ -657,7 +657,7 @@ function openProfiles(forceNew) {
     const li = document.createElement('li');
     li.className = 'list-item' + (p.id === profile()?.id ? ' sel' : '');
     li.innerHTML = `<div class="name"><b>${escapeHtml(p.name)}</b><small>Age ${p.age} · 🔥 ${p.id === profile()?.id ? streak() : ''}</small></div>
-      <button class="btn small" data-act="use">Play as</button><button class="btn small ghost" data-act="edit">✎</button>`;
+      <button class="btn small" data-act="use">Play as</button><button class="btn small ghost" data-act="edit">✎ Edit</button>`;
     li.querySelector('[data-act=use]').onclick = () => { settings.profileId = p.id; saveAll(); closeProfiles(); renderHome(); };
     li.querySelector('[data-act=edit]').onclick = () => editProfile(p);
     ul.appendChild(li);
@@ -1362,7 +1362,7 @@ function renderCloud() {
   $('#cloudSignOut').classList.toggle('hidden', !u);
   $('#cloudLink').classList.toggle('hidden', !cfg);
   $('#cloudSetup').open = !cfg;
-  $('#cloudBtn').textContent = u ? '☁️' : '☁️?';
+  $('#cloudLbl').textContent = u ? 'Synced' : 'Sign in';
   $('#cloudBtn').title = u ? `Synced with ${u.email || 'Google'}` : 'Sign in with Google to keep photos on every device';
 }
 async function cloudStart() {
