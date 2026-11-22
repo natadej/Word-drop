@@ -621,7 +621,7 @@ function renderLevels() {
     b.innerHTML = `${cur ? '<span class="start">START</span>' : ''}
       <span class="bubble">${unlocked ? (passed ? '★' : i + 1) : '🔒'}</span>
       <span class="stars-row">${passed ? starsHtml(best.pct) : ''}</span>
-      <span class="lv">Level ${i + 1} · ${levelSec(i).toFixed(1)}s a word</span>
+      <span class="lv">Level ${i + 1} · ${modeFor(i).name} · ${levelSec(i).toFixed(1)}s a word</span>
       <span class="lv-desc ${list.subject}">${escapeHtml(preview)}</span>`;
     if (unlocked) b.onclick = () => startGame(list.id, i);
     box.appendChild(b);
@@ -967,11 +967,22 @@ const recog = (() => {
 })();
 
 // ---------- GAME ----------
+// Levels 1-3: castle (one lane, 3 hearts). 4-6: tower, one word at a time. 7-12: two words at once. 13+: three.
+const MODES = {
+  castle: { kind: 'castle', multi: 1, name: '🏰 Castle', rule: 'Read each word before it hits the castle. You have 3 hearts ❤️' },
+  tower: { kind: 'tower', multi: 1, name: '🧱 Tower', rule: 'Missed words turn to stone. Read 3 in a row to smash a stone. Keep the tower below the red line!' },
+  tower2: { kind: 'tower', multi: 2, name: '🧱 Tower ×2', rule: '2 words fall at once. Read either one first. 3 in a row smashes a stone.' },
+  tower3: { kind: 'tower', multi: 3, name: '🧱 Tower ×3', rule: '3 words fall at once. 5 in a row blasts a whole row!' },
+};
+const modeFor = (i) => MODES[i < 3 ? 'castle' : i < 6 ? 'tower' : i < 12 ? 'tower2' : 'tower3'];
+const HEARTS = 3, GOLD_EVERY = 7;
 const G = {
   running: false, paused: false, raf: 0, last: 0, W: 0, H: 0, cols: 3, colW: 100, rowH: 56, rows: 10,
-  stacks: [], active: null, queue: [], list: null, levelIdx: 0, total: 0, resolved: 0,
-  score: 0, streak: 0, bestStreak: 0, read: 0, missed: [], times: [], fallSec: 3, colorIdx: 0, rescueTile: null, spawnDelay: 0,
+  stacks: [], falling: [], pick: null, lastFocus: null, queue: [], list: null, levelIdx: 0, total: 0, resolved: 0, spawned: 0,
+  mode: MODES.castle, hearts: HEARTS, speed: 1, over: '', lastMissed: [], lastMissedList: null,
+  score: 0, streak: 0, bestStreak: 0, read: 0, missed: [], times: [], fallSec: 3, colorIdx: 0, spawnDelay: 0,
 };
+const isCastle = () => G.mode.kind === 'castle';
 function layout() {
   const b = $('#board');
   G.W = b.clientWidth; G.H = b.clientHeight; G.colW = G.W / G.cols;
@@ -980,12 +991,16 @@ function layout() {
   b.style.setProperty('--colw', G.colW + 'px');
   G.lineY = (G.H - G.rows * G.rowH) + G.rowH;
   $('#dangerLine').style.top = G.lineY + 'px';
+  $('#castle').style.height = G.rowH + 'px';
 }
-function measure() { const w = $('#board').clientWidth; G.cols = w >= 700 ? 5 : w >= 480 ? 4 : 3; layout(); }
+function measure() { const w = $('#board').clientWidth; G.cols = isCastle() ? 1 : w >= 700 ? 5 : w >= 480 ? 4 : 3; layout(); }
 const stackTop = (col) => G.H - (G.stacks[col].length + 1) * G.rowH;
+const groundTop = (col) => (isCastle() ? G.H - 2 * G.rowH : stackTop(col));
+const tileW = () => (isCastle() ? Math.min(G.W - 24, 280) : G.colW - 6);
+const tileX = (t) => (isCastle() ? (G.W - tileW()) / 2 : t.col * G.colW + 3);
 function placeTile(t) {
-  const x = t.col * G.colW + 3, y = t.y;
-  t.el.style.width = (G.colW - 6) + 'px'; t.el.style.height = (G.rowH - 4) + 'px';
+  const x = tileX(t), y = t.y;
+  t.el.style.width = tileW() + 'px'; t.el.style.height = (G.rowH - 4) + 'px';
   t.el.style.transform = `translate(${x}px, ${y}px)`; t.el.style.setProperty('--t', `translate(${x}px, ${y}px)`);
 }
 function fitFont(el, text) {
@@ -994,7 +1009,7 @@ function fitFont(el, text) {
     if (/[\u0E31\u0E34-\u0E3A\u0E47-\u0E4E]/.test(ch)) continue;
     units += HAN_RE.test(ch) ? 1.05 : THAI_RE.test(ch) ? 0.62 : ch === ' ' ? 0.3 : 0.58;
   }
-  el.style.fontSize = Math.max(13, Math.min((G.colW - 16) / Math.max(1, units), G.rowH * 0.5)) + 'px';
+  el.style.fontSize = Math.max(13, Math.min((tileW() - 10) / Math.max(1, units), G.rowH * 0.5)) + 'px';
 }
 function makeTile(item, col) {
   const el = document.createElement('div');
@@ -1002,26 +1017,47 @@ function makeTile(item, col) {
   el.textContent = item.text;
   const pal = typeof themeColors === 'function' ? themeColors() : TILE_COLORS;
   el.style.background = pal[G.colorIdx++ % pal.length];
-  fitFont(el, item.text);
   $('#board').appendChild(el);
+  fitFont(el, item.text);
   return { item, col, y: -G.rowH, el, born: performance.now(), lineAt: null, hinted: false, pausedMs: 0 };
 }
 function spawn() {
   const item = G.queue.shift();
-  const heights = G.stacks.map((s) => s.length), minH = Math.min(...heights);
-  const cands = heights.map((h, i) => [h, i]).filter(([h]) => h <= minH + 2).map(([, i]) => i);
+  const busy = new Set(G.falling.map((t) => t.col)), heights = G.stacks.map((s) => s.length);
+  let cands = heights.map((_, i) => i).filter((i) => !busy.has(i));
+  if (!cands.length) cands = heights.map((_, i) => i);
+  const minH = Math.min(...cands.map((i) => heights[i]));
+  cands = cands.filter((i) => heights[i] <= minH + 2);
   const col = cands[Math.random() * cands.length | 0];
   const t = makeTile(item, col);
-  t.v = (stackTop(col) + G.rowH) / G.fallSec;
-  G.active = t; placeTile(t);
-  recog.setLang(srLang(item.lang));
-  hud();
+  t.boss = !G.queue.length && G.total >= 5;
+  t.gold = !t.boss && (G.spawned + 1) % GOLD_EVERY === 0;
+  if (t.boss) t.el.classList.add('boss');
+  if (t.gold) t.el.classList.add('gold');
+  t.v = (groundTop(col) + G.rowH) / G.fallSec * G.speed * (t.boss ? 0.85 : 1);
+  t.el.onclick = () => { if (G.falling.includes(t)) { G.pick = t; updateFocus(); } };
+  G.falling.push(t); G.spawned++; G.spawnDelay = 0.6; placeTile(t);
+  updateFocus(); hud();
+}
+function focusTile() {
+  if (G.pick && G.falling.includes(G.pick)) return G.pick;
+  return G.falling.reduce((a, b) => (!a || b.y / groundTop(b.col) > a.y / groundTop(a.col) ? b : a), null);
+}
+function updateFocus() {
+  const f = focusTile();
+  for (const t of G.falling) t.el.classList.toggle('focus', G.falling.length > 1 && t === f);
+  if (f && f !== G.lastFocus) { G.lastFocus = f; recog.setLang(srLang(f.item.lang)); }
 }
 function hud() {
   $('#hudLevel').textContent = G.levelIdx + 1;
-  $('#hudWord').textContent = `${Math.min(G.total, G.resolved + (G.active ? 1 : 0))}/${G.total}`;
+  $('#hudWord').textContent = `${Math.min(G.total, G.resolved + G.falling.length)}/${G.total}`;
   $('#hudScore').textContent = G.score;
   $('#hudPass').textContent = Math.ceil(G.total * MAX_PTS * PASS_PCT / 100);
+}
+function renderCastle(hit) {
+  const c = $('#castle');
+  c.innerHTML = `🏰<span>${'❤️'.repeat(Math.max(0, G.hearts))}${'🤍'.repeat(HEARTS - Math.max(0, G.hearts))}</span>`;
+  if (hit) { c.classList.remove('hit'); void c.offsetWidth; c.classList.add('hit'); }
 }
 function floatText(txt, x, y) {
   const f = document.createElement('div');
@@ -1029,7 +1065,7 @@ function floatText(txt, x, y) {
   f.style.left = Math.max(4, Math.min(G.W - 80, x)) + 'px'; f.style.top = Math.max(0, y) + 'px';
   $('#board').appendChild(f); setTimeout(() => f.remove(), 1000);
 }
-function popTile(t) { t.el.classList.remove('active', 'stacked', 'rescue'); t.el.classList.add('pop'); setTimeout(() => t.el.remove(), 450); }
+function popTile(t) { t.el.classList.remove('active', 'focus', 'stone'); t.el.classList.add('pop'); setTimeout(() => t.el.remove(), 450); }
 function beep(ok, combo = 0) {
   try {
     const ac = beep.ac || (beep.ac = new (window.AudioContext || window.webkitAudioContext)());
@@ -1042,7 +1078,7 @@ function beep(ok, combo = 0) {
     o.start(now); o.stop(now + 0.3);
   } catch {}
 }
-function pointsFor(sec, span) { // sec counts from the red line; span = time from the line to the stack
+function pointsFor(sec, span) { // sec counts from the red line; span = time from the line to the ground
   if (sec <= 1) return MAX_PTS;
   return Math.max(60, Math.round(MAX_PTS - 40 * (sec - 1) / Math.max(0.5, span - 1)));
 }
@@ -1054,107 +1090,130 @@ function showCombo() {
   if (n >= 5 && n % 5 === 0) {
     const big = document.createElement('div'); big.className = 'combo-big'; big.textContent = `${n} in a row!`;
     $('#board').appendChild(big); setTimeout(() => big.remove(), 1300);
-    praise(n >= 15 ? 2 : n >= 10 ? 1 : 0, G.active?.item.lang);
+    praise(n >= 15 ? 2 : n >= 10 ? 1 : 0, G.list?.subject === 'mix' ? 'th' : G.list?.subject);
   }
 }
+function dangerCheck() { $('#board').classList.toggle('danger', !isCastle() && Math.max(0, ...G.stacks.map((s) => s.length)) >= G.rows - 3); }
+function relayoutCol(col) { G.stacks[col].forEach((t, i) => { t.y = G.H - (i + 1) * G.rowH; placeTile(t); }); }
+function smashStone() {
+  let c = -1;
+  G.stacks.forEach((s, i) => { if (s.length && (c < 0 || s.length > G.stacks[c].length)) c = i; });
+  if (c < 0) return;
+  const t = G.stacks[c].pop(); floatText('💥', tileX(t) + 10, t.y); popTile(t); relayoutCol(c); dangerCheck();
+}
+function blastRow() {
+  if (!G.stacks.some((s) => s.length)) return;
+  G.stacks.forEach((s, c) => { const t = s.shift(); if (t) popTile(t); relayoutCol(c); });
+  floatText('💥 Row cleared!', G.W / 2 - 70, G.H - 2 * G.rowH); dangerCheck();
+}
 function resolveWord() {
-  G.active = null; G.resolved++; G.spawnDelay = 0.35; hud();
+  G.resolved++; G.spawnDelay = Math.max(G.spawnDelay, 0.35); hud();
   if (G.resolved >= G.total) setTimeout(() => G.running && levelEnd(), 600);
 }
-function correctActive(byMic) {
-  const t = G.active;
-  if (!t || !G.running || G.paused) return;
+const dropTile = (t) => { G.falling = G.falling.filter((x) => x !== t); if (G.pick === t) G.pick = null; };
+function correctTile(t, byMic) {
+  if (!t || !G.running || G.paused || !G.falling.includes(t)) return;
   const sec = t.lineAt == null ? 0 : (performance.now() - t.lineAt - (t.pausedMs - t.pausedAtLine)) / 1000;
   let pts = pointsFor(sec, t.span); if (t.hinted) pts = Math.round(pts / 2);
+  if (t.gold || t.boss) pts *= 2;
   mark(t.item, t.hinted || sec > t.span * 0.8 ? 0.5 : 1);
   G.score += pts; G.streak++; G.read++; G.bestStreak = Math.max(G.bestStreak, G.streak); G.times.push(sec);
-  floatText('+' + pts + (byMic ? ' 🎤' : ''), t.col * G.colW + 8, t.y);
-  popTile(t); beep(true, G.streak); showCombo(); resolveWord();
+  G.speed = Math.min(1.35, G.speed + 0.03);
+  floatText('+' + pts + (byMic ? ' 🎤' : ''), tileX(t) + 8, t.y);
+  dropTile(t); popTile(t); beep(true, G.streak); showCombo();
+  if (isCastle()) { if (t.gold && G.hearts < HEARTS) { G.hearts++; renderCastle(); floatText('+❤️', G.W / 2 - 20, G.H - 2 * G.rowH); } }
+  else if (t.gold || G.streak % 5 === 0) blastRow();
+  else if (G.streak % 3 === 0) smashStone();
+  updateFocus(); resolveWord();
 }
-function land() {
-  const t = G.active;
-  t.y = stackTop(t.col);
-  t.el.classList.remove('active'); t.el.classList.add('stacked');
-  t.el.onclick = () => openRescue(t);
-  G.stacks[t.col].push(t); placeTile(t);
+const correctActive = (byMic) => correctTile(focusTile(), byMic);
+function land(t) {
+  dropTile(t);
   if (!G.missed.some((m) => m.text === t.item.text)) G.missed.push(t.item);
   mark(t.item, 0);
-  G.streak = 0; beep(false); showCombo();
-  if (G.stacks[t.col].length >= G.rows) { G.active = null; levelEnd(); return; }
-  resolveWord();
+  G.streak = 0; G.speed = Math.max(1, G.speed - 0.1); beep(false); showCombo();
+  if (isCastle()) {
+    G.hearts--; renderCastle(true); popTile(t);
+    if (G.hearts <= 0) { G.over = 'castle'; levelEnd(); return; }
+  } else {
+    t.y = stackTop(t.col); t.el.onclick = null; t.el.textContent = '';
+    t.el.classList.remove('active', 'focus', 'gold', 'boss'); t.el.classList.add('stone');
+    G.stacks[t.col].push(t); placeTile(t); dangerCheck();
+    if (G.stacks[t.col].length >= G.rows - 1) { G.over = 'tower'; levelEnd(); return; }
+  }
+  updateFocus(); resolveWord();
 }
 function mark(item, r) {
   if (item.lang === 'math') return;
   const k = mKey(item.lang, item.text), prev = G.res.get(k);
   G.res.set(k, prev == null ? r : Math.min(prev, r));
 }
-function relayoutCol(col) { G.stacks[col].forEach((t, i) => { t.y = G.H - (i + 1) * G.rowH; placeTile(t); }); }
-function rescue(t) {
-  const col = t.col, idx = G.stacks[col].indexOf(t);
-  if (idx < 0) return;
-  G.stacks[col].splice(idx, 1);
-  mark(t.item, 0.5); floatText('✓', col * G.colW + 8, t.y); popTile(t); beep(true); relayoutCol(col); closeRescue();
-}
-function openRescue(t) {
-  if (G.rescueTile) G.rescueTile.el.classList.remove('rescue');
-  G.rescueTile = t; t.el.classList.add('rescue');
-  $('#rescueWord').textContent = t.item.text; $('#rescueWord').className = 'rescue-word ' + t.item.lang;
-  $('#rescuePop').classList.remove('hidden');
-}
-function closeRescue() { if (G.rescueTile) G.rescueTile.el.classList.remove('rescue'); G.rescueTile = null; $('#rescuePop').classList.add('hidden'); }
-$('#rescueSay').onclick = () => G.rescueTile && say(sayText(G.rescueTile.item), G.rescueTile.item.lang);
-$('#rescueOk').onclick = () => G.rescueTile && rescue(G.rescueTile);
-$('#rescueClose').onclick = closeRescue;
-
 function onHeard(alts) {
   if (!G.running || G.paused) return false;
-  if (G.active && matches(G.active.item, alts)) { correctActive(true); return true; }
-  for (const col of G.stacks) for (const t of col) {
-    if (srLang(t.item.lang) !== recog.lang || t.item.lang === 'math') continue;
-    if (normalize(t.item.text).length >= 2 && matches(t.item, alts)) { rescue(t); return true; }
-  }
+  const t = [...G.falling].sort((a, b) => b.y - a.y).find((x) => matches(x.item, alts));
+  if (t) { correctTile(t, true); return true; }
   return false;
 }
 function frame(now) {
   if (!G.running) return;
   const dt = Math.min(0.05, (now - G.last) / 1000); G.last = now;
   if (!G.paused) {
-    if (!G.active) { if (G.queue.length) { G.spawnDelay -= dt; if (G.spawnDelay <= 0) spawn(); } }
-    else {
-      const t = G.active; t.y += t.v * dt;
-      if (t.lineAt == null && t.y + G.rowH >= G.lineY) { t.lineAt = now; t.pausedAtLine = t.pausedMs; t.span = Math.max(0, stackTop(t.col) - t.y) / t.v; }
-      if (t.y >= stackTop(t.col)) land(); else placeTile(t);
+    if (G.queue.length && G.falling.length < G.mode.multi) {
+      G.spawnDelay -= dt;
+      const last = G.falling[G.falling.length - 1];
+      if (G.spawnDelay <= 0 && (!last || last.y > groundTop(last.col) * 0.4)) spawn();
     }
-  } else if (G.active) G.active.pausedMs += dt * 1000;
+    for (const t of [...G.falling]) {
+      t.y += t.v * dt;
+      if (t.lineAt == null && t.y + G.rowH >= G.lineY) { t.lineAt = now; t.pausedAtLine = t.pausedMs; t.span = Math.max(0, groundTop(t.col) - t.y) / t.v; }
+      if (t.y >= groundTop(t.col)) { land(t); if (!G.running) return; } else placeTile(t);
+    }
+    updateFocus();
+  } else for (const t of G.falling) t.pausedMs += dt * 1000;
   G.raf = requestAnimationFrame(frame);
 }
-function clearBoard() { $$('#board .tile, #board .float, #board .countdown').forEach((e) => e.remove()); }
+function modeIntro(done) {
+  const m = G.mode, d = document.createElement('div');
+  d.className = 'mode-intro';
+  d.innerHTML = `<b>${m.name}</b><p>${m.rule}</p><small>Gold word = ×2 · Last word is the 👑 boss</small><span class="btn primary">Go!</span>`;
+  $('#board').appendChild(d);
+  let t = 0;
+  const go = () => { clearTimeout(t); if (!d.isConnected) return; d.remove(); if ($('#game').classList.contains('active')) done(); };
+  d.onclick = go; t = setTimeout(go, 3500);
+}
+function clearBoard() { $$('#board .tile, #board .float, #board .countdown, #board .mode-intro').forEach((e) => e.remove()); }
 function startGame(listId, levelIdx) {
   G.list = getList(listId) || currentList();
   if (G.list.words && !G.list.words.length) { toast('This list is empty'); return; }
   if (levelIdx == null) levelIdx = nextLevelIdx(G.list);
   show('game');
-  $('#overOverlay').classList.add('hidden'); $('#pauseOverlay').classList.add('hidden'); closeRescue();
+  $('#overOverlay').classList.add('hidden'); $('#pauseOverlay').classList.add('hidden');
+  G.mode = modeFor(levelIdx);
+  $('#board').classList.toggle('castle-mode', isCastle()); $('#board').classList.remove('danger');
   clearBoard(); measure();
   const items = levelItems(G.list, levelIdx);
+  const bi = items.reduce((m, it, i) => (it.lang !== 'math' && it.text.length > (items[m]?.text.length ?? -1) ? i : m), -1);
+  if (bi >= 0) items.push(items.splice(bi, 1)[0]);
+  const review = G.lastMissedList === G.list.id ? G.lastMissed : [];
   Object.assign(G, {
-    stacks: Array.from({ length: G.cols }, () => []), active: null, queue: items, levelIdx, total: items.length, resolved: 0,
+    stacks: Array.from({ length: G.cols }, () => []), falling: [], pick: null, lastFocus: null, queue: items, levelIdx, total: items.length, resolved: 0, spawned: 0, hearts: HEARTS, speed: 1, over: '',
     score: 0, streak: 0, bestStreak: 0, read: 0, missed: [], res: new Map(), times: [], fallSec: levelSec(levelIdx), colorIdx: 0, paused: false, spawnDelay: 0,
   });
-  hud(); showCombo();
+  hud(); showCombo(); renderCastle();
   recog.onWords = onHeard;
   recog.setLang(srLang(items[0].lang));
   if (profile().mic === 'mic' && recog.supported) recog.start();
   else { recog.stop(); $('#heard').textContent = recog.supported ? 'Mic off (parent mode)' : 'No speech recognition in this browser'; }
   if ('speechSynthesis' in window) speechSynthesis.speak(new SpeechSynthesisUtterance(''));
-  warmup(items, G.list, () => countdown(3, () => { G.running = true; G.last = performance.now(); G.raf = requestAnimationFrame(frame); }));
+  warmup(items, G.list, () => modeIntro(() => countdown(3, () => { G.running = true; G.last = performance.now(); G.raf = requestAnimationFrame(frame); })), review);
 }
 
 // ---------- warm-up: listen, see how it is spelled, say it back ----------
 const W = { list: [], i: 0, done: null, lesson: null, timer: 0 };
-function warmup(items, list, done) {
-  const seen = new Set();
-  W.list = items.filter((it) => it.lang !== 'math' && !seen.has(it.lang + it.text) && seen.add(it.lang + it.text) && (list.phonics || !isKnown(it.lang, it.text))).slice(0, list.phonics ? 15 : 8);
+function warmup(items, list, done, review = []) {
+  const seen = new Set(), fresh = (it) => it.lang !== 'math' && !seen.has(it.lang + it.text) && seen.add(it.lang + it.text);
+  const again = review.filter(fresh).slice(0, 3);
+  W.list = [...again, ...items.filter((it) => fresh(it) && (list.phonics || !isKnown(it.lang, it.text))).slice(0, list.phonics ? 15 : 8)];
   if (!W.list.length || profile().warmup === 'off') { done(); return; }
   Object.assign(W, { i: 0, done, lesson: list.phonics ? TH.LESSONS[G.levelIdx] : null });
   recog.onWords = warmHeard;
@@ -1203,10 +1262,11 @@ function countdown(n, done) {
   tick();
 }
 function setPaused(p) { if (!G.running) return; G.paused = p; $('#pauseOverlay').classList.toggle('hidden', !p); }
-function stopGame() { if (W.done) { W.done = null; $('#warmOverlay').classList.add('hidden'); } G.running = false; cancelAnimationFrame(G.raf); recog.stop(); closeRescue(); }
+function stopGame() { if (W.done) { W.done = null; $('#warmOverlay').classList.add('hidden'); } G.running = false; cancelAnimationFrame(G.raf); recog.stop(); }
 function levelEnd() {
   stopGame();
-  const max = G.total * MAX_PTS, pct = Math.round(G.score / max * 100), passed = pct >= PASS_PCT;
+  const max = G.total * MAX_PTS, pct = Math.min(100, Math.round(G.score / max * 100)), passed = pct >= PASS_PCT && !G.over;
+  G.lastMissed = G.missed.slice(); G.lastMissedList = G.list.id;
   const p = prog(G.list.id), prev = p[G.levelIdx];
   const isBest = !prev || G.score > prev.score;
   if (isBest) { p[G.levelIdx] = { pct, score: G.score }; save(K.progress, progress); }
@@ -1218,7 +1278,9 @@ function levelEnd() {
     ...lr.change.filter(([, a, b]) => Math.abs(b - a) >= 0.05).map(([l, a, b]) => `${SUBJECTS[l]} reading level ${b > a ? '↑' : '↓'} ${b.toFixed(1)}`),
   ].filter(Boolean).join(' · ');
   const hasNext = G.levelIdx + 1 < levelCount(G.list);
-  $('#finTitle').textContent = passed ? `Level ${G.levelIdx + 1} passed! 🎉` : `Level ${G.levelIdx + 1}: try again`;
+  $('#finTitle').textContent = passed ? `Level ${G.levelIdx + 1} passed! 🎉`
+    : G.over === 'castle' ? `Level ${G.levelIdx + 1}: the castle fell 💔` : G.over === 'tower' ? `Level ${G.levelIdx + 1}: the tower got too high 🧱` : `Level ${G.levelIdx + 1}: try again`;
+  $('#againBtn').classList.toggle('primary', !passed);
   $('#finPct').textContent = pct + '%'; $('#finPct').classList.toggle('fail', !passed);
   $('#finBar').style.width = '0'; $('#finBar').style.background = passed ? 'var(--ok)' : 'var(--danger)';
   requestAnimationFrame(() => requestAnimationFrame(() => { $('#finBar').style.width = Math.min(100, pct) + '%'; }));
@@ -1226,7 +1288,7 @@ function levelEnd() {
   $('#finRead').textContent = `${G.read} / ${G.total}`;
   $('#finStreak').textContent = G.bestStreak;
   $('#finAvg').textContent = G.times.length ? (G.times.reduce((a, b) => a + b, 0) / G.times.length).toFixed(1) + 's' : '–';
-  $('#finBest').textContent = (passed ? (hasNext ? `Level ${G.levelIdx + 2} unlocked. ` : 'All levels passed! ') : `Need ${PASS_PCT}% to pass. `)
+  $('#finBest').textContent = (passed ? (hasNext ? `Level ${G.levelIdx + 2} unlocked. ` : 'All levels passed! ') : G.over ? 'Read faster to keep it safe! ' : `Need ${PASS_PCT}% to pass. `)
     + (isBest && prev ? 'New best score!' : prev ? `Best: ${prev.pct}%` : '');
   $('#finDaily').textContent = rec.passed >= goal
     ? (before < goal ? `Daily goal done! 🔥 ${streak()} day streak` : `Today: ${rec.passed} levels passed 🔥 ${streak()}`)
@@ -1245,7 +1307,7 @@ function levelEnd() {
   $('#overOverlay').classList.remove('hidden');
 }
 $('#okBtn').onclick = () => correctActive(false);
-$('#hintBtn').onclick = () => { if (G.active && G.running && !G.paused) { G.active.hinted = true; say(sayText(G.active.item), G.active.item.lang); } };
+$('#hintBtn').onclick = () => { const t = focusTile(); if (t && G.running && !G.paused) { t.hinted = true; say(sayText(t.item), t.item.lang); } };
 $('#pauseBtn').onclick = () => setPaused(true);
 $('#resumeBtn').onclick = () => setPaused(false);
 $('#quitBtn').onclick = () => { stopGame(); show('home'); renderHome(); };
@@ -1261,8 +1323,9 @@ document.addEventListener('visibilitychange', () => { if (document.hidden && G.r
 window.addEventListener('resize', () => {
   if (!G.running) return;
   const oldH = G.H; layout();
-  G.stacks.forEach((s, c) => { s.forEach((t) => fitFont(t.el, t.item.text)); relayoutCol(c); });
-  if (G.active) { const f = G.H / oldH; G.active.y *= f; G.active.v *= f; fitFont(G.active.el, G.active.item.text); placeTile(G.active); }
+  G.stacks.forEach((s, c) => relayoutCol(c));
+  const f = G.H / oldH;
+  for (const t of G.falling) { t.y *= f; t.v *= f; fitFont(t.el, t.item.text); placeTile(t); }
 });
 
 // ---------- cloud sync (Sign in with Google, Firebase) ----------
@@ -1404,4 +1467,4 @@ function checkCloudHash() {
 // ---------- init ----------
 document.addEventListener('DOMContentLoaded', () => { checkCloudHash(); checkHashImport(); renderHome(); cloudStart(); });
 window.addEventListener('hashchange', () => { checkCloudHash(); checkHashImport(); renderHome(); cloudStart(); });
-window.__twd = { player, praise, smartWords, wordPool, learn, skillOf, cloudMerge, cloudData, cloudRefs, get mastery() { return mastery; }, soundKey, thaiNum, say, recog, refs, bookGrade, bookList, addRef, guessGrade, G, splitText, encodeList, decodeList, onHeard, correctActive, levelItems, getList, numbersIn, parseExpr, matches, mathItem, streak, days, progress };
+window.__twd = { player, praise, smartWords, wordPool, learn, skillOf, cloudMerge, cloudData, cloudRefs, get mastery() { return mastery; }, soundKey, thaiNum, say, recog, refs, bookGrade, bookList, addRef, guessGrade, G, splitText, encodeList, decodeList, onHeard, correctActive, modeFor, startGame, levelItems, getList, numbersIn, parseExpr, matches, mathItem, streak, days, progress };

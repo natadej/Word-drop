@@ -1,6 +1,6 @@
 # Word Drop (อ่านให้ทัน!)
 
-A falling-word reading game for kids. Words, Chinese characters or sums drop from the top like Tetris; the child reads each one aloud before it lands on the stack. The microphone checks the answer (Web Speech API), and a parent "✓ He read it!" button always works too.
+A falling-word reading game for kids. Words, Chinese characters or sums drop from the top; the child reads each one aloud before it lands. The microphone checks the answer (Web Speech API), and a parent "✓ He read it!" button always works too.
 
 Static site: no build step, no server code. Serve the folder with any static server, e.g. `python3 -m http.server 8080`.
 
@@ -8,6 +8,11 @@ Static site: no build step, no server code. Serve the folder with any static ser
 - **Thai**, **English**, **Chinese (Simplified)**: built-in word banks for ages 4–6, 7–9 and 10–12 (`banks.js`), plus your own lists.
 - **Math**: generated sums that get harder level by level and by age. The child says the answer in English, Thai or Chinese (set per profile).
 - **Mix**: 15 items per level mixing all four; the mic switches language for each item.
+
+## Game modes (by level)
+- **🏰 Castle** (levels 1–3): one lane, 3 hearts. A word that hits the castle costs a heart; 0 hearts ends the level.
+- **🧱 Tower** (levels 4–6, then ×2 at 7–12 and ×3 from 13: that many words fall at once): a missed word lands and turns into a grey stone that can no longer be read. 3 correct in a row smashes the top stone of the tallest tower, 5 in a row clears the bottom row. The level ends if a tower reaches the red line.
+- Every 7th word is **gold** (×2 points; clears a row, or gives back a heart in Castle). The longest word comes last as the **👑 boss** (×2). Words fall a little faster after each correct read and slow down after a miss. Missed words come back first in the next warm-up of the same list.
 
 ## Levels and scoring
 - 15 items per level; each item is worth up to 100 points (timed from when it touches the red line: 100 within 1 s, down to 60 just before it lands, 0 if missed, half with "Hear it").
