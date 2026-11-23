@@ -7,7 +7,7 @@ import edge_tts
 FALLBACK = {'th-TH': 'th-TH-NiwatNeural', 'en-US': 'en-US-JennyNeural', 'zh-CN': 'zh-CN-XiaoyiNeural'}  # used when the main voice returns no audio
 VOICES = {'th-TH': ('th-TH-PremwadeeNeural', '-10%'), 'en-US': ('en-US-AnaNeural', '-5%'), 'zh-CN': ('zh-CN-XiaoxiaoNeural', '-10%')}
 PRAISE = {
-    'th-TH': ['เก่งมาก!', 'ยอดเยี่ยม!', 'สุดยอดไปเลย!', 'ผ่านแล้ว เก่งมาก!', 'ไม่เป็นไร ลองอีกครั้งนะ สู้ๆ!', 'เลื่อนขั้นแล้ว!'],
+    'th-TH': ['เก่งมาก!', 'ยอดเยี่ยม!', 'สุดยอดไปเลย!', 'ผ่านแล้ว เก่งมาก!', 'ไม่เป็นไร ลองอีกครั้งนะ สู้ๆ!', 'ผ่านค่ะ!'],
     'en-US': ['Great job!', 'Awesome!', 'Amazing!', 'Level passed! Well done!', 'Good try! Let\'s try again!', 'You ranked up!'],
     'zh-CN': ['很好！', '太棒了！', '真厉害！', '过关了，真棒！', '没关系，再试一次，加油！', '升级了！'],
 }

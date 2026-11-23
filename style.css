@@ -12,6 +12,9 @@ body{overscroll-behavior:none}
 #game.screen{max-width:none;padding:0;height:100dvh;height:100vh;overflow:hidden}
 #game.screen.active{display:flex;flex-direction:column}
 @supports(height:100dvh){#game.screen{height:100dvh}}
+html.playing,html.playing body{overflow:hidden;overscroll-behavior:none;touch-action:none}
+html.playing body{position:fixed;inset:0;width:100%}
+html.playing .btn,html.playing button{touch-action:manipulation}
 .hidden{display:none!important}
 h1{font-size:clamp(28px,7vw,44px);margin:8px 0 0;line-height:1.1}
 h1 .th{display:block;font-family:var(--thai);color:var(--accent);font-size:.75em}

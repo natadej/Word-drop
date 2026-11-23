@@ -182,7 +182,13 @@ function learn(results) { // results: Map lang:word → 1 read, 0.5 hint/late, 0
 }
 
 // ---------- utils ----------
-function show(id) { $$('.screen').forEach((s) => s.classList.toggle('active', s.id === id)); window.scrollTo(0, 0); }
+function show(id) { $$('.screen').forEach((s) => s.classList.toggle('active', s.id === id)); document.documentElement.classList.toggle('playing', id === 'game'); window.scrollTo(0, 0); }
+// The game is one fixed screen: swiping must never scroll or pull the page (only scrollable dialogs may scroll).
+document.addEventListener('touchmove', (e) => {
+  if (!document.documentElement.classList.contains('playing')) return;
+  const d = e.target.closest?.('.dialog');
+  if (!d || d.scrollHeight <= d.clientHeight) e.preventDefault();
+}, { passive: false });
 let toastTimer;
 function toast(msg, ms = 2200) {
   const t = $('#toast'); t.textContent = msg; t.classList.remove('hidden');
@@ -297,8 +303,35 @@ function matches(item, alts) {
   if (alts.some((a) => normalize(a).includes(w))) return true;
   if (item.lang !== 'th') return false;
   const key = soundKey(item.text), k = key.length >= 8 ? 2 : key.length >= 4 ? 1 : 0;
-  return !!key && alts.some((a) => fuzzyIn(key, soundKey(a), k));
+  if (key && alts.some((a) => fuzzyIn(key, soundKey(a), k))) return true;
+  return key.length <= 3 && shortThaiMatch(item.text, key, alts);
 }
+// One-syllable words (พ่อ, นี่) are often heard with a short/long vowel swapped (นิ) or written in Latin letters (Por, Knee).
+const loseLength = (s) => s.replace(/[\u0E35]/g, '\u0E34').replace(/\u0E39/g, '\u0E38').replace(/\u0E37/g, '\u0E36').replace(/\u0E32/g, '\u0E30');
+const TH_ROMAN = { ก: 'k', ข: 'k', ค: 'k', ฆ: 'k', ง: 'ng', จ: 'c', ฉ: 'c', ช: 'c', ฌ: 'c', ซ: 's', ส: 's', ศ: 's', ษ: 's', ด: 'd', ฎ: 'd', ต: 't', ฏ: 't', ถ: 't', ท: 't', ธ: 't', ฐ: 't', ฑ: 't', ฒ: 't', น: 'n', ณ: 'n',
+  บ: 'b', ป: 'p', พ: 'p', ผ: 'p', ภ: 'p', ฟ: 'f', ฝ: 'f', ม: 'm', ย: 'y', ญ: 'y', ร: 'l', ล: 'l', ฬ: 'l', ว: 'w', ห: '', ฮ: '', อ: '',
+  'ะ': 'a', 'า': 'a', 'ั': 'a', 'ิ': 'i', 'ี': 'i', 'ึ': 'u', 'ื': 'u', 'ุ': 'u', 'ู': 'u', 'เ': 'e', 'แ': 'e', 'โ': 'o', 'ไ': 'ai', 'ใ': 'ai', 'ำ': 'am' };
+const FINAL_ROMAN = { ก: 'k', ข: 'k', ค: 'k', ด: 't', ต: 't', ท: 't', ส: 't', จ: 't', ช: 't', บ: 'p', ป: 'p', พ: 'p', น: 'n', ณ: 'n', ญ: 'n', ร: 'n', ล: 'n', ม: 'm', ง: 'ng', ย: 'i', ว: 'o' };
+function thaiRoman(w) {
+  const cs = [...w.replace(/[\u0E47-\u0E4E]/g, '')];
+  if (/[เแโไใ]/.test(cs[0]) && cs[1]) [cs[0], cs[1]] = [cs[1], cs[0]];
+  let out = '', vowel = false;
+  cs.forEach((c, i) => {
+    if (i === 0) { out += TH_ROMAN[c] ?? ''; return; }
+    if (c === 'อ' || c === 'ว' && !vowel && i === cs.length - 1) { out += c === 'อ' ? 'o' : 'ua'; vowel = true; return; }
+    if (/[ก-ฮ]/.test(c)) { out += vowel ? FINAL_ROMAN[c] ?? '' : TH_ROMAN[c] ?? ''; return; }
+    out += TH_ROMAN[c] ?? ''; vowel = true;
+  });
+  return out.replace(/h/g, '');
+}
+const latinKey = (s) => s.toLowerCase().replace(/[^a-z]/g, '').replace(/^kn/, 'n').replace(/^g/, 'k').replace(/(ph|bh)/g, 'p').replace(/th/g, 't').replace(/kh/g, 'k').replace(/(ch|sh|j)/g, 'c')
+  .replace(/(ee|ea|ie|ey|y$)/g, 'i').replace(/(aw|au|or|oh|ow|oa|our)/g, 'o').replace(/(ar|ah)$/g, 'a').replace(/er$/g, 'e').replace(/r/g, 'l').replace(/v/g, 'w').replace(/h/g, '').replace(/(.)\1+/g, '$1');
+function shortThaiMatch(text, key, alts) {
+  const loose = loseLength(key), rom = thaiRoman(normalize(text));
+  return alts.some((a) => a.split(/\s+/).some((x) => loseLength(soundKey(x)) === loose
+    || (rom.length >= 2 && /^[a-z]{2,6}$/i.test(x) && latinKey(x) === rom)));
+}
+
 const sayText = (item) => (item.lang === 'math' ? String(item.answer) : item.say || item.text);
 
 // ---------- speech synthesis ----------
