@@ -409,7 +409,7 @@ label input[type=text]{width:100%}
 .pt i{font-style:normal;font-size:24px;width:30px;text-align:center}
 .pt b{display:block}.pt small{color:var(--muted)}
 .howto{position:relative;text-align:center;max-width:360px}
-.how-skip{position:absolute;top:8px;right:8px}
+.how-skip{position:absolute;top:8px;right:8px;z-index:1}
 .how-dots{display:flex;gap:6px;justify-content:center;margin:10px 0}
 .how-dots i{width:8px;height:8px;border-radius:50%;background:var(--surface2)}.how-dots i.on{background:var(--accent)}
 .invisible{visibility:hidden}
