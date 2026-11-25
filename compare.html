@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Word Drop — cartoon art comparison</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Crect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%235a45c9%22/%3E%3Ctext x=%2250%22 y=%2272%22 font-size=%2260%22 text-anchor=%22middle%22 fill=%22%23ffcc33%22%3E%E0%B8%81%3C/text%3E%3C/svg%3E">
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#f3eee5;color:#393b48;font:15px system-ui,sans-serif}main{max-width:1160px;margin:auto;padding:32px 24px}header{display:flex;align-items:center;justify-content:space-between;gap:24px}h1{font-size:30px;letter-spacing:-1px;margin:7px 0 10px}p{color:#73717c;font-size:14px;line-height:1.6;margin:0;max-width:600px}.eyebrow{font-size:10px;text-transform:uppercase;letter-spacing:2px;color:#84659e;font-weight:800}a{color:#705196;text-decoration:none;font-weight:700}.try{border:1px solid #cdbfda;padding:12px 18px;border-radius:30px;white-space:nowrap;background:#fffaf3}nav{display:flex;gap:8px;margin:24px 0;flex-wrap:wrap}button{border:1px solid #d6cddd;background:#fffaf3;color:#706b79;padding:10px 19px;border-radius:24px;font:600 13px system-ui;cursor:pointer}button[aria-pressed=true]{background:#755496;color:white;border-color:#755496}button:focus-visible,a:focus-visible{outline:3px solid #9f83b8;outline-offset:4px}.pair{display:grid;grid-template-columns:1fr 1fr;gap:28px;max-width:928px;margin:auto}.label{display:flex;justify-content:space-between;align-items:center;margin:0 8px 12px;font-size:12px;font-weight:750}.label span{font-size:10px;font-weight:500;color:#7c7684}iframe{width:100%;height:850px;border:7px solid #fffaf3;border-radius:30px;box-shadow:0 12px 35px #50413c12;background:#1b1f3b}footer{max-width:928px;margin:22px auto;color:#847d89;font-size:11px;line-height:1.8}footer b{color:#66556f}@media(max-width:700px){main{padding:22px 12px}header{display:block}.try{display:inline-block;margin-top:16px}.pair{gap:10px}iframe{border-width:3px;border-radius:16px;height:740px}.label{display:block;font-size:10px}.label span{display:block;font-size:9px;margin-top:3px}h1{font-size:25px}button{padding:9px 13px}.pair.mobile-single{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<main>
+  <header><div><span class="eyebrow">Art direction study / 01</span><h1>Same Word Drop. A little more wonder.</h1><p>Original screens beside a softer, illustrated storybook world.<br>Same name, icon, learning loop and rewards. Nothing has changed in the live game.</p></div><a class="try" href="index.html">Try the cartoon look ↗</a></header>
+  <nav aria-label="Choose a screen">
+    <button data-scene="learn" aria-pressed="true">Learn</button><button data-scene="game" aria-pressed="false">Gameplay</button><button data-scene="pet" aria-pressed="false">Buddy</button><button data-scene="lists" aria-pressed="false">Word lists</button><button data-scene="ranks" aria-pressed="false">Ranks</button><button data-scene="me" aria-pressed="false">Me</button>
+  </nav>
+  <div class="pair">
+    <section><div class="label">BEFORE <span>Original · current main</span></div><iframe id="before" title="Original Word Drop sample" src="index.html?look=original&amp;artPreview=1&amp;scene=learn"></iframe></section>
+    <section><div class="label">AFTER <span>Cartoon blend · concept only</span></div><iframe id="after" title="Cartoon Word Drop sample" src="index.html?artPreview=1&amp;scene=learn"></iframe></section>
+  </div>
+  <footer><b id="sceneNote">Sample learner data · no real progress is read or saved.</b><br>Original dragon and forest illustrations, rounded paper-like panels, a quieter palette, and readable word tiles. Facebook reference required a login, so this is an interpretation of the requested cartoon blend, not a reproduction.<br>On a narrow phone, each side scrolls independently. <a id="openBefore" href="index.html?look=original&amp;artPreview=1">Open before</a> · <a id="openAfter" href="index.html?artPreview=1">Open after</a> for full-size screens.</footer>
+</main>
+<script>
+  const allowed = ['learn','game','pet','lists','ranks','me'];
+  function selectScene(scene) {
+    if (!allowed.includes(scene)) scene = 'learn';
+    document.querySelectorAll('[data-scene]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.scene === scene)));
+    const before = `index.html?look=original&artPreview=1&scene=${scene}`;
+    const after = `index.html?artPreview=1&scene=${scene}`;
+    document.querySelector('#before').src = before; document.querySelector('#after').src = after;
+    document.querySelector('#openBefore').href = before; document.querySelector('#openAfter').href = after;
+    document.querySelector('#sceneNote').textContent = scene === 'game' ? 'Gameplay still · identical sample word and score · try the cartoon look above to play.' : 'Sample learner data · no real progress is read or saved. Online services are disabled.';
+    history.replaceState(null, '', '#' + scene);
+  }
+  document.querySelectorAll('[data-scene]').forEach((b) => b.onclick = () => selectScene(b.dataset.scene));
+  selectScene(location.hash.slice(1) || 'learn');
+</script>
+</body>
+</html>

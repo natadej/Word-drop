@@ -1,6 +1,8 @@
 'use strict';
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
+// Comparison frames use ephemeral sample data, never a family's saved game.
+const appStorage = window.wordDropPreviewStorage || localStorage;
 
 // ---------- constants ----------
 const K = { lists: 'twd.lists.v1', settings: 'twd.settings.v1', progress: 'twd.progress.v2', profiles: 'twd.profiles.v1', days: 'twd.days.v1', refs: 'twd.refs.v1', mastery: 'twd.mastery.v1', cloud: 'twd.cloud.v1' };
@@ -13,9 +15,9 @@ const THAI_RE = /[\u0E00-\u0E7F]/, HAN_RE = /[\u3400-\u9FFF]/, LATIN_RE = /[A-Za
 const TILE_COLORS = ['#ff6b6b','#ffa94d','#ffd43b','#69db7c','#38d9a9','#4dabf7','#748ffc','#da77f2','#f783ac'];
 
 // ---------- storage ----------
-const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
+const load = (k, d) => { try { return JSON.parse(appStorage.getItem(k)) ?? d; } catch { return d; } };
 let Cloud = null, cloudQuiet = false;
-const save = (k, v) => { localStorage.setItem(k, JSON.stringify(v)); cloudDirty(k); };
+const save = (k, v) => { appStorage.setItem(k, JSON.stringify(v)); cloudDirty(k); };
 let lists = load(K.lists, []).map((l) => ({ subject: 'th', ...l }));
 let settings = Object.assign({ subject: 'th', listId: {} }, load(K.settings, {}));
 if (typeof settings.listId !== 'object' || !settings.listId) settings.listId = {};
@@ -60,7 +62,7 @@ function guessGrade(items, subject) {
 }
 function saveRefs() {
   for (;;) {
-    try { localStorage.setItem(K.refs, JSON.stringify(refs)); cloudDirty(K.refs); return; } catch (e) {
+    try { appStorage.setItem(K.refs, JSON.stringify(refs)); cloudDirty(K.refs); return; } catch (e) {
       const withThumb = Object.values(refs).flat().filter((r) => r.thumb).sort((a, b) => a.id.localeCompare(b.id));
       if (!withThumb.length) throw e;
       withThumb[0].thumb = null;
@@ -86,7 +88,7 @@ function photoOf(canvas) {
 const idb = (() => {
   let dbp;
   const db = () => (dbp ||= new Promise((res, rej) => {
-    const r = indexedDB.open('twd', 1);
+    const r = indexedDB.open(window.wordDropPreviewStorage ? 'twd-art-preview' : 'twd', 1);
     r.onupgradeneeded = () => r.result.createObjectStore('photos');
     r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
   }));
@@ -1367,7 +1369,7 @@ const SYNC = [K.lists, K.profiles, K.progress, K.days, K.mastery, K.refs];
 const cloudState = { user: null, msg: '' };
 function cloudDirty(k) {
   if (cloudQuiet || !SYNC.includes(k)) return;
-  localStorage.setItem('twd.cloud.dirty', '1');
+  appStorage.setItem('twd.cloud.dirty', '1');
   if (Cloud) Cloud.dirty();
 }
 const cloudCfg = () => load(K.cloud, null);
@@ -1404,8 +1406,8 @@ const mergeMap = (a = {}, b = {}, f) => { const o = { ...a }; for (const k in b)
 function cloudMerge(remote, remoteRefs, uid) { // first sign-in on this device, or offline edits: keep both sides
   const local = cloudData(), localRefs = cloudRefs();
   if (!Object.keys(remote).length && !remoteRefs.length) return;
-  const first = localStorage.getItem('twd.cloud.uid') !== uid, dirty = localStorage.getItem('twd.cloud.dirty') === '1';
-  localStorage.setItem('twd.cloud.uid', uid);
+  const first = appStorage.getItem('twd.cloud.uid') !== uid, dirty = appStorage.getItem('twd.cloud.dirty') === '1';
+  appStorage.setItem('twd.cloud.uid', uid);
   if (!first && !dirty) { // the cloud is the truth; keep only photos made here that never reached it
     const ids = new Set(remoteRefs.map((r) => r.id));
     cloudSet(remote, [...remoteRefs, ...localRefs.filter((r) => !ids.has(r.id) && !findRef(r.id)?.c)]);
@@ -1432,7 +1434,7 @@ function cloudMerge(remote, remoteRefs, uid) { // first sign-in on this device, 
   for (const r of localRefs) if (!rr.has(r.id)) rr.set(r.id, { ...r, pid: map[r.pid] || r.pid });
   if (map[settings.profileId]) { settings.profileId = map[settings.profileId]; save(K.settings, settings); }
   cloudSet(data, [...rr.values()]);
-  localStorage.setItem('twd.cloud.dirty', '1');
+  appStorage.setItem('twd.cloud.dirty', '1');
 }
 const findRef = (id) => Object.values(refs).flat().find((r) => r.id === id);
 function cloudPushed() {
@@ -1441,7 +1443,7 @@ function cloudPushed() {
   for (const r of Object.values(refs).flat()) if (!r.c) { r.c = 1; changed = true; }
   if (changed) saveRefs();
   cloudQuiet = false;
-  localStorage.setItem('twd.cloud.dirty', '0');
+  appStorage.setItem('twd.cloud.dirty', '0');
 }
 async function cloudPhotos() { // upload the big photo of each page once
   if (!Cloud || !cloudState.user) return;
@@ -1463,12 +1465,13 @@ function renderCloud() {
   $('#cloudBtn').title = u ? `Synced with ${u.email || 'Google'}` : 'Sign in with Google to keep photos on every device';
 }
 async function cloudStart() {
+  if (window.wordDropPreviewStorage) return;
   const cfg = cloudCfg();
   if (!cfg || Cloud) return;
   try {
     const m = await import('./cloud.js');
     Cloud = m.start(cfg, {
-      device: (localStorage.getItem('twd.device') || (localStorage.setItem('twd.device', 'd' + Date.now()), localStorage.getItem('twd.device'))),
+      device: (appStorage.getItem('twd.device') || (appStorage.setItem('twd.device', 'd' + Date.now()), appStorage.getItem('twd.device'))),
       data: cloudData, refs: cloudRefs, merge: cloudMerge, apply: cloudSet, pushed: cloudPushed,
       status: (user, msg = '') => { cloudState.user = user; cloudState.msg = msg; renderCloud(); if (user && msg === 'synced') cloudPhotos(); },
     });

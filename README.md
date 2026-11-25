@@ -4,6 +4,21 @@ A falling-word reading game for kids. Words, Chinese characters or sums drop fro
 
 Static site: no build step, no server code. Serve the folder with any static server, e.g. `python3 -m http.server 8080`.
 
+## Cartoon art preview (unmerged concept)
+
+On the cartoon-preview branch, open `compare.html` for the original and cartoon
+screens side by side (Learn, gameplay, Buddy, Lists, Ranks and Me). The sample
+profile is in memory only; it does not load or save a family's data, authenticate,
+or submit leaderboard scores. Gameplay in the comparison is a labeled still.
+Use **Try the cartoon look** to play normally with the branch's art treatment,
+or `index.html?look=original` to use the original skin. The title and favicon
+are unchanged, and all illustrations are original local SVGs with no image APIs.
+
+This branch is for art selection only: do not merge or deploy to production.
+The repo's existing GitHub Pages site deploys `main` and has no PR preview setup.
+The Facebook reference required a login, so the forest/reading-dragon treatment
+interprets the requested cartoon blend rather than reproducing the video.
+
 ## Subjects
 - **Thai**, **English**, **Chinese (Simplified)**: built-in word banks for ages 4–6, 7–9 and 10–12 (`banks.js`), plus your own lists.
 - **Math**: generated sums that get harder level by level and by age. The child says the answer in English, Thai or Chinese (set per profile).
