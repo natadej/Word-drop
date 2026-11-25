@@ -255,12 +255,12 @@ function howShow() {
   $('#howNext').textContent = howI === HOWTO.length - 1 ? "Let's play! ▶" : 'Next ›';
 }
 function openHow() { howI = 0; howShow(); $('#howto').classList.remove('hidden'); }
-function closeHow() { $('#howto').classList.add('hidden'); localStorage.setItem('twd.howto.v1', '1'); }
+function closeHow() { $('#howto').classList.add('hidden'); appStorage.setItem('twd.howto.v1', '1'); }
 $('#howNext').onclick = () => { if (howI === HOWTO.length - 1) closeHow(); else { howI++; howShow(); } };
 $('#howBack').onclick = () => { if (howI > 0) { howI--; howShow(); } };
 $('#howSkip').onclick = closeHow;
 $$('.how-btn').forEach((b) => (b.onclick = openHow));
-function maybeHowto() { if ($('#howto').classList.contains('hidden') && !localStorage.getItem('twd.howto.v1') && profiles.length && $('#home').classList.contains('active')) openHow(); }
+function maybeHowto() { if ($('#howto').classList.contains('hidden') && !appStorage.getItem('twd.howto.v1') && profiles.length && $('#home').classList.contains('active')) openHow(); }
 window.__pet = { pet, known, stageOf, albumPages, phrases, petLevelEnd, openEgg, hatch, feed, openHow, petHeard };
 setTimeout(maybeHowto, 400);
 renderPet();

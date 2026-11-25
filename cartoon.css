@@ -1,0 +1,104 @@
+/* All illustration rules are opt-out with ?look=original. Gameplay sizes stay intact. */
+html.cartoon {
+  --bg:#f6f2e9; --surface:#fffdf7; --surface2:#e9e2f3; --text:#343b4b; --muted:#697083;
+  --accent:#7253a4; --accent-fg:#fffdf7; --ok:#317a61; --danger:#bc5269; --radius:20px;
+}
+.cartoon body {background:radial-gradient(ellipse at 5% 5%,#e3eee6 0,transparent 42%),radial-gradient(ellipse at 95% 70%,#e6dff1 0,transparent 42%),var(--bg)}
+.cartoon button:focus-visible,.cartoon a:focus-visible {outline:3px solid #7253a4;outline-offset:4px}
+.cartoon #home.screen {max-width:560px;padding:12px 18px calc(90px + env(safe-area-inset-bottom))}
+.cartoon .topbar {background:#f6f2e9ed;backdrop-filter:blur(12px);border-bottom:1px solid #dcd9d0;padding:10px 0 12px}
+.cartoon .avatar {background:#f4dfbc;border:2px solid #d6ba91;box-shadow:0 3px 0 #cbb088}
+.cartoon .pill {background:#fffdf7;border:1.5px solid #ded8cb;padding:4px 7px;box-shadow:0 2px 0 #e0d8c8}
+.cartoon .pill.fire b {color:#a75c35}.cartoon .pill.gem b {color:#34778b}.cartoon .pill.xp b {color:#7253a4}
+.cartoon .tabs {padding:4px 0;gap:7px;margin-bottom:14px}
+.cartoon .tabs button {background:#fffdf7;border:1.5px solid #dcd6cc;border-bottom-width:4px;border-radius:15px;color:#697083;min-height:58px}
+.cartoon .tabs button.sel {background:#e9e1f5;border-color:#b8a3cf;color:#60418d}
+.cartoon .tabs button small {color:inherit}
+.story-hero {display:none}
+.cartoon .story-hero {display:flex;position:relative;align-items:center;min-height:192px;padding:20px;margin-bottom:16px;overflow:hidden;border:2px solid #a4bca9;border-bottom-width:5px;border-radius:24px;background:#dff2ed url('art/forest.svg') center 56%/cover}
+.story-copy {position:relative;z-index:1;width:62%}
+.story-kicker {display:block;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1.8px;color:#4c6e61;margin-bottom:7px}
+.story-hero h1 {font-size:34px;color:#354e45;margin:0;letter-spacing:-1px}
+.story-hero p {font-size:14px;line-height:1.5;color:#446456;margin:7px 0 0;max-width:190px}
+.story-hero img {width:190px;position:absolute;right:-15px;bottom:-13px;transform:rotate(6deg)}
+.cartoon .learn-top {gap:8px;margin-bottom:14px}
+.cartoon .buddy-mini {background:#f1eaf8;border:1.5px solid #cdbbdd;border-bottom-width:4px;padding:8px 10px}
+.cartoon .how-btn {background:#fffdf7;border:1.5px solid #ded8cb;border-bottom-width:4px;font-size:12px;padding:6px 9px}
+.cartoon .panel {border:1.5px solid #dcd5c9;border-bottom:4px solid #dcd5c9;box-shadow:0 5px 18px #70604406;padding:17px}
+.cartoon .panel h3 {color:#454052}
+.cartoon .quests {background:#fffdf7;position:relative}
+.cartoon .quest-head h3 {font-size:19px}
+.cartoon .quest .q-text {font-size:14px}
+.cartoon .q-bar {height:14px;background:#f0eade;border:1px solid #dfd5c3}
+.cartoon .q-bar div {background:#d7b76b;border-right:2px solid #ae8b42}
+.cartoon .q-bar span {color:#4e4533;text-shadow:none;font-size:10px}
+.cartoon .quest.done .q-bar div {background:#a8d5bd}
+.cartoon .chest {opacity:1;filter:none}
+.cartoon .chest:not(.ready):not(.opened) {opacity:.65}
+.cartoon .list-picker {background:#eae3f3;border:1.5px solid #ccbcdd;border-bottom:4px solid #ccbcdd;margin-top:18px}
+.cartoon .path {position:relative;isolation:isolate;margin:14px -5px 0;overflow:hidden;border:1.5px solid #b3cbb7;border-radius:24px;background:#e3eedb url('art/forest.svg') center top/100% auto repeat-y;padding:30px 0}
+.cartoon .path::before {content:'';position:absolute;left:calc(50% - 6px);top:45px;bottom:0;width:12px;background:#f7edcd;border:2px dashed #c9ba8d;z-index:-1}
+.cartoon .level-card.node {background:transparent;border:0;box-shadow:none}
+.cartoon .node .bubble {border:3px solid #5d467d;background:#a48ac9;box-shadow:0 6px 0 #5d467d,inset 0 3px 0 #ffffff60;color:white}
+.cartoon .node.current .bubble {animation:none;background:#9171bb;box-shadow:0 6px 0 #5d467d,0 0 0 8px #ffffff80}
+.cartoon .node.passed .bubble {background:#f5d38b;border-color:#b78b43;color:#805b28;box-shadow:0 6px 0 #b78b43}
+.cartoon .node.locked .bubble {background:#d5dfd1;border-color:#9cab9b;box-shadow:0 6px 0 #9cab9b}
+.cartoon .node .lv,.cartoon .node .lv-desc {background:#fffdf7e8;border-radius:8px;padding:0 6px;color:#405c4c}
+.cartoon .node .start {background:#7253a4;color:white;animation:none}
+.cartoon .node .start::after {border-top-color:#7253a4}
+.cartoon .stars-row i.on {color:#936516;text-shadow:none}
+.cartoon .bottom-nav {background:#fffdf7f5;backdrop-filter:blur(12px);border-top:2px solid #dcd5c9;box-shadow:0 -4px 20px #71654a08}
+.cartoon .bottom-nav button.sel {background:#ede5f6;color:#694893}
+.cartoon .bottom-nav i {filter:none}
+.cartoon .btn {background:#eae3f3;border:1.5px solid #c9b9db;border-bottom-width:4px;color:#624486;border-radius:14px}
+.cartoon .btn.primary {background:#8464ad;border-color:#5e437f;color:white}
+.cartoon .btn.ok {background:#b6dbc2;border-color:#6e9e80;color:#294e36}
+.cartoon .btn.danger {background:#f2d3d6;border-color:#c2929a;color:#843b4b}
+.cartoon .btn.ghost {background:#fffdf7;border-color:#ddd4c4;color:#676358}
+.cartoon .list-item {background:#f2ecf7;border:1px solid #e0d5ec;border-radius:16px;padding:13px}
+.cartoon .list-item.sel {outline:2px solid #9b7abf;outline-offset:1px}
+.cartoon .list-item .best {color:#76529c}
+.cartoon .panel-head h2 {font-size:25px}
+.cartoon .pet-card {background:#fffdf7;padding-top:0;overflow:hidden}
+.cartoon .pet-box {height:220px;margin:0 -17px 12px;background:#dff2ed url('art/forest.svg') center 65%/cover;border-bottom:2px solid #afc6b0}
+.cartoon #petFace[data-art-kind=dragon] {display:block;width:210px;height:210px;font-size:0;background:url('art/dragon.svg') center/contain no-repeat}
+.cartoon .pet.happy {animation:none}
+.cartoon .pet-actions {gap:5px}
+.cartoon .pet-actions .btn {font-size:12px;padding:7px 9px}
+.cartoon .sticker {background:#eee8df;border:1.5px dashed #d2c5b3;color:#767164}
+.cartoon .sticker.got {border-style:solid;box-shadow:0 3px 0 #d3c3a8}
+.cartoon .sticker.got.c0,.cartoon .sticker.got.c3 {background:#dcebd8;color:#416346}
+.cartoon .sticker.got.c1,.cartoon .sticker.got.c4 {background:#e9dff3;color:#6b4a8e}
+.cartoon .sticker.got.c2,.cartoon .sticker.got.c5 {background:#f8e5bc;color:#87652f}
+.cartoon .daily-box,.cartoon .streak-prizes span {background:#f6efdf;border-radius:14px}
+.cartoon .me-card {background:#ede5f6}
+.cartoon .stats-grid b {color:#76529c}
+.cartoon .pt i {background:#f0e9f8;border-radius:12px}
+.cartoon .shop-item,.cartoon .trophy,.cartoon .rank-row,.cartoon .seg {background:#f0eaf6;border-color:#d4c6e1;color:#5c496e}
+.cartoon .trophy.locked {opacity:.5}
+.cartoon .rank-row.me {background:#e7ddef}
+.cartoon .dialog {border:2px solid #c6b8d4;box-shadow:0 8px 0 #4a365330}
+.cartoon .dialog.howto {padding-top:52px}
+.cartoon .how-skip {z-index:2}
+.cartoon .overlay {background:#34304388;backdrop-filter:blur(5px)}
+.cartoon input,.cartoon select,.cartoon textarea {background:#fffdf7;border-color:#cfc1dd;color:#343b4b}
+.cartoon .hud {background:#fffdf7;border-bottom:2px solid #d8cfbd;padding-bottom:12px}
+.cartoon .board {border:2px solid #9cbaa9;border-bottom-width:5px;border-radius:22px;background:#dff2ed url('art/forest.svg') center bottom/cover}
+.cartoon .board::before {content:'';position:absolute;inset:0;background:#fffdf51f;pointer-events:none}
+.cartoon .tile {border:2px solid #59476c;box-shadow:0 5px 0 #59476c,inset 0 3px 0 #ffffff70;color:#342e43;text-shadow:none;border-radius:15px}
+.cartoon .tile.active {outline-color:#fffdf7;outline-offset:3px}
+.cartoon .tile.stone {border-color:#7c837c;background:repeating-linear-gradient(135deg,#b0b9ac 0 8px,#a4b09f 8px 16px)!important;box-shadow:0 4px 0 #7c837c}
+.cartoon .castle {background:#f5e4bcdd;border-color:#bc9c68;z-index:1}
+.cartoon .game-controls {background:#fffdf7}
+.cartoon .mode-intro {background:#fffdf7f5;border:2px solid #c9b9db;color:#343b4b}
+.cartoon .mode-intro p,.cartoon .mode-intro small {color:#697083}
+.cartoon .warm-word {color:#7253a4}
+@media(max-width:390px) {
+  .cartoon #home.screen {padding-left:12px;padding-right:12px}
+  .cartoon .pill {padding:4px 5px}.cartoon .who #profileName {max-width:65px}
+  .cartoon .story-hero {min-height:180px;padding:16px}.story-hero img {width:165px;right:-20px}
+  .story-hero h1 {font-size:30px}.story-hero p {max-width:150px;font-size:13px}
+}
+@media(prefers-reduced-motion:reduce) {
+  .cartoon *, .cartoon *::before, .cartoon *::after {animation:none!important;transition:none!important}
+}

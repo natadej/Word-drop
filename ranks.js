@@ -8,6 +8,7 @@ const rollNick = () => `${NICK_A[rand(0, NICK_A.length - 1)]} ${NICK_B[rand(0, N
 const randHex = (n) => [...crypto.getRandomValues(new Uint8Array(n))].map((x) => x.toString(16).padStart(2, '0')).join('');
 const newUuid = () => (crypto.randomUUID ? crypto.randomUUID() : randHex(16).replace(/^(.{8})(.{4}).(.{3}).(.{3})(.{12})$/, '$1-$2-4$3-a$4-$5'));
 async function rpc(fn, args) {
+  if (window.wordDropPreviewStorage) throw new Error('Sample preview: online leaderboard is disabled');
   const r = await fetch(`${SB.url}/rest/v1/rpc/${fn}`, { method: 'POST', headers: { apikey: SB.key, 'Content-Type': 'application/json' }, body: JSON.stringify(args) });
   const j = await r.json().catch(() => null);
   if (!r.ok) throw new Error(j?.message || 'leaderboard error ' + r.status);
