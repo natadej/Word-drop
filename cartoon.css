@@ -78,6 +78,8 @@ html.cartoon {
 .cartoon .trophy.locked {opacity:.5}
 .cartoon .rank-row.me {background:#e7ddef}
 .cartoon .dialog {border:2px solid #c6b8d4;box-shadow:0 8px 0 #4a365330}
+.cartoon .dialog.howto {padding-top:52px}
+.cartoon .how-skip {z-index:2}
 .cartoon .overlay {background:#34304388;backdrop-filter:blur(5px)}
 .cartoon input,.cartoon select,.cartoon textarea {background:#fffdf7;border-color:#cfc1dd;color:#343b4b}
 .cartoon .hud {background:#fffdf7;border-bottom:2px solid #d8cfbd;padding-bottom:12px}
